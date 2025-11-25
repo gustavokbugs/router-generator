@@ -37,13 +37,17 @@ pip install customtkinter pillow
 
 ## Biblioteca C
 
-A biblioteca deve expor a função:
+A biblioteca deve expor as funções:
 
 ```c
+// Função de teste que retorna uma mensagem
+const char* get_test_message();
+
+// Função que gera rota entre dois pontos
 int generate_route(int sx, int sy, int ex, int ey, char* outbuf, int buflen);
 ```
 
-Formato da saída:
+Formato da saída de `generate_route`:
 
 ```
 x,y
@@ -53,22 +57,32 @@ x,y
 
 ### Compilação
 
-Linux:
+#### Windows (usando MinGW):
 
 ```bash
-gcc -shared -o librouter.so -fPIC router.c
+# Execute o script de compilação
+build.bat
+
+# Ou compile manualmente:
+cd backend
+gcc -c grafo_db.c -o grafo_db.o
+gcc -shared -o router.dll main.c grafo_db.o -Wl,--out-implib,librouter.a
 ```
 
-Windows:
+#### Linux:
 
 ```bash
-gcc -shared -o router.dll router.c
+cd backend
+gcc -c grafo_db.c -o grafo_db.o
+gcc -shared -fPIC -o librouter.so main.c grafo_db.o
 ```
 
-macOS:
+#### macOS:
 
 ```bash
-gcc -shared -o librouter.dylib -fPIC router.c
+cd backend
+gcc -c grafo_db.c -o grafo_db.o
+gcc -shared -fPIC -o librouter.dylib main.c grafo_db.o
 ```
 
 ---
@@ -91,11 +105,15 @@ Escolha entre múltiplos destinos ou destino único.
 - Clique em **Marcar Destino**, depois no mapa.
 - Ou selecione pelos **pontos turísticos** pré-definidos.
 
-### 4. Gerar rota
+### 4. Testar integração C
+
+Clique em **🔌 Testar Backend C** para verificar se a DLL está funcionando corretamente.
+
+### 5. Gerar rota
 
 Clique em **Gerar Rota**.
 
-### 5. Controles de Mapa
+### 6. Controles de Mapa
 
 - Zoom: + / -
 - Arrastar com o mouse

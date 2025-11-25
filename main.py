@@ -33,6 +33,8 @@ class RouterLib:
 
     def _load_lib(self):
         candidates = [
+            resource_path('backend\\router.dll'),
+            resource_path('backend\\librouter.dll'),
             resource_path('router.dll'),
             resource_path('librouter.dll'),
             resource_path('librouter.so'),
@@ -45,9 +47,25 @@ class RouterLib:
                     if hasattr(self.lib, 'generate_route'):
                         self.lib.generate_route.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
                         self.lib.generate_route.restype = ctypes.c_int
+                    
+                    # Configurar função de teste
+                    if hasattr(self.lib, 'get_test_message'):
+                        self.lib.get_test_message.argtypes = []
+                        self.lib.get_test_message.restype = ctypes.c_char_p
                     return
                 except Exception:
                     self.lib = None
+
+    def get_test_message(self) -> str:
+        """Obtém mensagem de teste do backend C"""
+        if self.lib and hasattr(self.lib, 'get_test_message'):
+            try:
+                result = self.lib.get_test_message()
+                if result:
+                    return result.decode('utf-8', errors='ignore')
+            except Exception as e:
+                return f'Erro ao chamar C: {e}'
+        return '⚠️ Biblioteca C não carregada (usando simulação Python)'
 
     def generate_route(self, sx: int, sy: int, ex: int, ey: int) -> str:
         if self.lib and hasattr(self.lib, 'generate_route'):
@@ -361,6 +379,7 @@ class ModernMapApp:
             ("📍 Marcar Origem", self._set_origin_mode, "#4361ee"),
             ("🎯 Marcar Destino", self._set_dest_mode, "#f72585"),
             ("🚀 Gerar Rota", self._on_generate_route, "#4cc9f0"),
+            ("🔌 Testar Backend C", self._test_c_backend, "#06d6a0"),
             ("🗑️ Limpar Tudo", self._clear, "#7209b7"),
         ]
 
@@ -571,6 +590,13 @@ class ModernMapApp:
         self.root.destroy()
         start_screen = StartScreen()
         start_screen.run()
+
+    def _test_c_backend(self):
+        """Testa a conexão com o backend C"""
+        self._log_message("🔌 Testando conexão com backend C...")
+        message = self.router.get_test_message()
+        self._log_message(f"📨 Resposta do C: {message}")
+        messagebox.showinfo("Backend C", message)
 
     def _set_origin_mode(self):
         self.mode = 'origin'
