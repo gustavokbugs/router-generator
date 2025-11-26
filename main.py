@@ -52,6 +52,23 @@ class RouterLib:
                     if hasattr(self.lib, 'get_test_message'):
                         self.lib.get_test_message.argtypes = []
                         self.lib.get_test_message.restype = ctypes.c_char_p
+                    
+                    # Configurar funções para obter pontos turísticos
+                    if hasattr(self.lib, 'get_num_pontos'):
+                        self.lib.get_num_pontos.argtypes = []
+                        self.lib.get_num_pontos.restype = ctypes.c_int
+                    
+                    if hasattr(self.lib, 'get_ponto_info'):
+                        self.lib.get_ponto_info.argtypes = [
+                            ctypes.c_int,           # index
+                            ctypes.c_char_p,        # nome_out
+                            ctypes.c_int,           # nome_len
+                            ctypes.c_char_p,        # categoria_out
+                            ctypes.c_int,           # cat_len
+                            ctypes.POINTER(ctypes.c_int)  # id_out
+                        ]
+                        self.lib.get_ponto_info.restype = ctypes.c_int
+                    
                     return
                 except Exception:
                     self.lib = None
@@ -66,6 +83,34 @@ class RouterLib:
             except Exception as e:
                 return f'Erro ao chamar C: {e}'
         return '⚠️ Biblioteca C não carregada (usando simulação Python)'
+
+    def load_tourist_spots(self) -> dict:
+        """Carrega pontos turísticos do backend C"""
+        spots = {}
+        
+        if not self.lib or not hasattr(self.lib, 'get_num_pontos') or not hasattr(self.lib, 'get_ponto_info'):
+            return spots
+        
+        try:
+            num_pontos = self.lib.get_num_pontos()
+            
+            for i in range(num_pontos):
+                nome_buf = ctypes.create_string_buffer(100)
+                cat_buf = ctypes.create_string_buffer(30)
+                id_val = ctypes.c_int()
+                
+                result = self.lib.get_ponto_info(i, nome_buf, 100, cat_buf, 30, ctypes.byref(id_val))
+                
+                if result == 0:
+                    nome = nome_buf.value.decode('utf-8', errors='ignore')
+                    id_ponto = id_val.value
+                    # Usar o ID como coordenada (x, y)
+                    spots[nome] = (id_ponto, id_ponto)
+        
+        except Exception as e:
+            print(f"Erro ao carregar pontos turísticos: {e}")
+        
+        return spots
 
     def generate_route(self, sx: int, sy: int, ex: int, ey: int) -> str:
         if self.lib and hasattr(self.lib, 'generate_route'):
@@ -259,17 +304,16 @@ class ModernMapApp:
         self.route_tags: List[str] = []
         self.route_colors = ['#4cc9f0', '#ffd166', '#ef476f', '#06d6a0', '#118ab2']
         
-        # Pontos turísticos pré-definidos (coordenadas exemplo - ajuste conforme seu mapa)
-        self.tourist_spots = {
-            "Torre Eiffel": (300, 200),
-            "Museu Louvre": (450, 350),
-            "Arco do Triunfo": (200, 150),
-            "Catedral Notre-Dame": (400, 280),
-            "Jardim de Luxemburgo": (350, 400),
-            "Palácio de Versalhes": (600, 500),
-            "Montmartre": (250, 300),
-            "Rio Sena": (380, 320)
-        }
+        # Carregar pontos turísticos do backend C
+        self.tourist_spots = self.router.load_tourist_spots() #Por enquanto esta sem coordenadas reais
+        
+        # Se não conseguiu carregar do C, usar pontos de exemplo
+        if not self.tourist_spots:
+            self.tourist_spots = {
+                "Renner": (270, 338),
+                "Ponto de Teste 2": (100, 100),
+                "Ponto de Teste 3": (150, 150),
+            }
 
         # Build modern UI
         self._build_modern_ui()
