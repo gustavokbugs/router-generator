@@ -118,7 +118,7 @@ void inicializar_vertices(Grafo* g) {
     adicionar_vertice(g, 106, "OCTO Sushi", "Restaurante", "R. Marechal Deodoro", TIPO_PONTO);
     adicionar_vertice(g, 107, "Gatta di Latte Gelateria", "Doces", "R. Marechal Deodoro", TIPO_PONTO);
     adicionar_vertice(g, 108, "Nàpule Pizzeria", "Restaurante", "R. Marechal Deodoro", TIPO_PONTO);
-    adicionar_vertice(g, 109, "Sr. Espetto Gastropub / Proeza Bier", "Restaurante", "R. Marechal Deodoro", TIPO_PONTO);
+    adicionar_vertice(g, 109, "Sr. Espetto Gastropub", "Restaurante", "R. Marechal Deodoro", TIPO_PONTO);
     adicionar_vertice(g, 110, "Kopenhagen", "Doces", "R. Marechal Deodoro", TIPO_PONTO);
     adicionar_vertice(g, 111, "Cheirin Bão", "Padaria", "R. Marechal Deodoro", TIPO_PONTO);
     adicionar_vertice(g, 112, "Flavia Eliel Calçados e Acessórios", "Moda e Vestuário", "R. Marechal Deodoro", TIPO_PONTO);
