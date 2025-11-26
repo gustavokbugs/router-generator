@@ -6,7 +6,7 @@
 
 /* Função que retorna uma mensagem de teste para o front-end */
 const char* obter_mensagem_teste() {
-    return "Olá! Sistema de navegação conectado com sucesso! ✅";
+    return "Sistema de navegação conectado com sucesso! ✅";
 }
 
 /* Função exportada para Python - Retorna mensagem de teste */
@@ -20,82 +20,104 @@ EXPORT const char* get_test_message() {
     return obter_mensagem_teste();
 }
 
-/* Função para obter o número de vértices do tipo PONTO */
+/* Função para obter o número de vértices do tipo PONTO (tipo == 1) */
 EXPORT int get_num_pontos() {
-    Grafo* grafo = criar_grafo();
-    if (grafo == NULL) return 0;
+    int count;
+    const VerticeData* vertices = obter_vertices_static(&count);
     
-    inicializar_vertices(grafo);
-    
-    int count = 0;
+    int num_pontos = 0;
     int i;
-    for (i = 0; i < grafo->num_vertices; i++) {
-        if (grafo->vertices[i].tipo == TIPO_PONTO) {
-            count++;
+    for (i = 0; i < count; i++) {
+        if (vertices[i].tipo == 1) {
+            num_pontos++;
         }
     }
     
-    destruir_grafo(grafo);
-    return count;
+    return num_pontos;
 }
 
-/* Função para obter informações de um ponto específico por índice */
-EXPORT int get_ponto_info(int index, char* nome_out, int nome_len, char* categoria_out, int cat_len, int* id_out) {
-    Grafo* grafo = criar_grafo();
-    if (grafo == NULL) return -1;
+/* Função otimizada para obter informações de um ponto específico por índice */
+EXPORT int get_ponto_info(int index, char* nome_out, int nome_len, 
+                          char* categoria_out, int cat_len, 
+                          int* id_out, int* x_out, int* y_out) {
+    int count;
+    const VerticeData* vertices = obter_vertices_static(&count);
     
-    inicializar_vertices(grafo);
-    
-    int count = 0;
+    int ponto_index = 0;
     int i;
-    int found = 0;
     
-    for (i = 0; i < grafo->num_vertices; i++) {
-        if (grafo->vertices[i].tipo == TIPO_PONTO) {
-            if (count == index) {
-                // Copiar informações
+    for (i = 0; i < count; i++) {
+        if (vertices[i].tipo == 1) {
+            if (ponto_index == index) {
+                /* Copiar informações diretamente do array estático */
                 if (nome_out != NULL && nome_len > 0) {
-                    strncpy(nome_out, grafo->vertices[i].nome, nome_len - 1);
+                    strncpy(nome_out, vertices[i].nome, nome_len - 1);
                     nome_out[nome_len - 1] = '\0';
                 }
                 if (categoria_out != NULL && cat_len > 0) {
-                    strncpy(categoria_out, grafo->vertices[i].categoria, cat_len - 1);
+                    strncpy(categoria_out, vertices[i].categoria, cat_len - 1);
                     categoria_out[cat_len - 1] = '\0';
                 }
                 if (id_out != NULL) {
-                    *id_out = grafo->vertices[i].id;
+                    *id_out = vertices[i].id;
                 }
-                found = 1;
-                break;
+                if (x_out != NULL) {
+                    *x_out = vertices[i].x;
+                }
+                if (y_out != NULL) {
+                    *y_out = vertices[i].y;
+                }
+                return 0;
             }
-            count++;
+            ponto_index++;
         }
     }
     
-    destruir_grafo(grafo);
-    return found ? 0 : -1;
+    return -1;
 }
 
 /* Função principal para testes locais */
 int main() {
-    printf("=== Sistema de Navegação - Backend em C ===\n");
+    printf("=== Sistema de Navegacao - Backend em C ===\n");
     printf("Mensagem de teste: %s\n", obter_mensagem_teste());
     
-    printf("\nInicializando grafo...\n");
+    printf("\nInicializando grafo a partir dos arquivos JSON...\n");
     Grafo* grafo = criar_grafo();
     
     if (grafo != NULL) {
         printf("Grafo criado com sucesso!\n");
+        
         inicializar_vertices(grafo);
-        printf("Vértices carregados: %d\n", grafo->num_vertices);
+        printf("Vertices carregados: %d\n", grafo->num_vertices);
         
         inicializar_arestas(grafo);
         printf("Arestas carregadas com sucesso!\n");
         
+        /* Exibir alguns vértices como exemplo */
+        printf("\n=== Exemplos de vertices carregados ===\n");
+        int i;
+        int count = 0;
+        for (i = 0; i < grafo->num_vertices && count < 5; i++) {
+            if (grafo->vertices[i].tipo == 1) { /* Pontos de interesse */
+                printf("ID: %d | Nome: %s\n", 
+                       grafo->vertices[i].id, 
+                       grafo->vertices[i].nome);
+                printf("  Categoria: %s | Rua: %s\n", 
+                       grafo->vertices[i].categoria, 
+                       grafo->vertices[i].rua);
+                printf("  Coordenadas: (%d, %d)\n\n", 
+                       grafo->vertices[i].x, 
+                       grafo->vertices[i].y);
+                count++;
+            }
+        }
+        
         destruir_grafo(grafo);
-        printf("Grafo destruído corretamente.\n");
+        printf("Grafo destruido corretamente.\n");
+    } else {
+        printf("Erro ao criar grafo!\n");
     }
     
-    printf("\n=== Sistema pronto para integração com Python ===\n");
+    printf("\n=== Sistema pronto para integracao com Python ===\n");
     return 0;
 }

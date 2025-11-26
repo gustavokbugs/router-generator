@@ -18,7 +18,7 @@ Grafo* criar_grafo() {
 }
 
 /* Adiciona um vértice ao grafo */
-void adicionar_vertice(Grafo* g, int id, const char* nome, const char* categoria, const char* rua, int tipo) {
+void adicionar_vertice(Grafo* g, int id, const char* nome, const char* categoria, const char* rua, int tipo, int x, int y) {
     if (g == NULL) {
         return;
     }
@@ -42,6 +42,8 @@ void adicionar_vertice(Grafo* g, int id, const char* nome, const char* categoria
     strncpy(v->rua, rua, MAX_RUA - 1);
     v->rua[MAX_RUA - 1] = '\0';
     v->tipo = tipo;
+    v->x = x;
+    v->y = y;
     
     /* Inicializa lista de adjacência vazia */
     g->lista_adj[g->num_vertices] = NULL;
