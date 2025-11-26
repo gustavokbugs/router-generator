@@ -20,20 +20,24 @@ if exist *.o del /Q *.o
 if exist router.dll del /Q router.dll
 
 echo.
-echo [1/4] grafo.c
+echo [1/5] grafo.c
 gcc -std=c99 -c grafo.c -o grafo.o || goto erro
 echo   OK
 
-echo [2/4] grafo_db.c
+echo [2/5] grafo_data.c
+gcc -std=c99 -c grafo_data.c -o grafo_data.o || goto erro
+echo   OK
+
+echo [3/5] grafo_db.c
 gcc -std=c99 -c grafo_db.c -o grafo_db.o || goto erro
 echo   OK
 
-echo [3/4] main.c
+echo [4/5] main.c
 gcc -std=c99 -c main.c -o main.o || goto erro
 echo   OK
 
-echo [4/4] Gerando DLL
-gcc -shared -o router.dll main.o grafo.o grafo_db.o || goto erro
+echo [5/5] Gerando DLL
+gcc -shared -o router.dll main.o grafo.o grafo_data.o grafo_db.o || goto erro
 echo   OK
 
 cd ..

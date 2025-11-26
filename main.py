@@ -65,7 +65,9 @@ class RouterLib:
                             ctypes.c_int,           # nome_len
                             ctypes.c_char_p,        # categoria_out
                             ctypes.c_int,           # cat_len
-                            ctypes.POINTER(ctypes.c_int)  # id_out
+                            ctypes.POINTER(ctypes.c_int),  # id_out
+                            ctypes.POINTER(ctypes.c_int),  # x_out
+                            ctypes.POINTER(ctypes.c_int)   # y_out
                         ]
                         self.lib.get_ponto_info.restype = ctypes.c_int
                     
@@ -96,16 +98,25 @@ class RouterLib:
             
             for i in range(num_pontos):
                 nome_buf = ctypes.create_string_buffer(100)
-                cat_buf = ctypes.create_string_buffer(30)
+                cat_buf = ctypes.create_string_buffer(50)
                 id_val = ctypes.c_int()
+                x_val = ctypes.c_int()
+                y_val = ctypes.c_int()
                 
-                result = self.lib.get_ponto_info(i, nome_buf, 100, cat_buf, 30, ctypes.byref(id_val))
+                result = self.lib.get_ponto_info(
+                    i, 
+                    nome_buf, 100, 
+                    cat_buf, 50, 
+                    ctypes.byref(id_val),
+                    ctypes.byref(x_val),
+                    ctypes.byref(y_val)
+                )
                 
                 if result == 0:
                     nome = nome_buf.value.decode('utf-8', errors='ignore')
-                    id_ponto = id_val.value
-                    # Usar o ID como coordenada (x, y)
-                    spots[nome] = (id_ponto, id_ponto)
+                    x = x_val.value
+                    y = y_val.value
+                    spots[nome] = (x, y)
         
         except Exception as e:
             print(f"Erro ao carregar pontos turísticos: {e}")
