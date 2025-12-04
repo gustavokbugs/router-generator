@@ -3,6 +3,7 @@
 #include <string.h>
 #include "grafo.h"
 #include "grafo_db.h"
+#include "grafo_algoritmos.h"
 
 /* Função que retorna uma mensagem de teste para o front-end */
 const char* obter_mensagem_teste() {

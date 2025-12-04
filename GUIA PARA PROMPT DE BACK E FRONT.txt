@@ -1,0 +1,289 @@
+# 📘 **GUIA DE APLICAÇÃO - SISTEMA DE NAVEGAÇÃO DIJKSTRA**
+
+## 🎯 **VISÃO GERAL DO SISTEMA**
+
+### **CONCEITO PRINCIPAL:**
+Sistema de navegação que calcula a **rota mais curta** entre dois pontos usando o **algoritmo Dijkstra**, com backend em C (DLL) e frontend em Python.
+
+### **MUDANÇA CRÍTICA DO PROJETO ORIGINAL:**
+**❌ REMOVER O MENU INICIAL** - O projeto original tinha 2 opções:
+1. Rota com múltiplos destinos (REMOVER)
+2. Rota origem→destino (MANTER)
+
+**✅ NOVA VERSÃO:** A aplicação abre **DIRETAMENTE** na tela do mapa com a função única de origem→destino.
+
+---
+
+## 🗺️ **COMPONENTES DO SISTEMA**
+
+### **1. BACKEND (C) - MOTOR DO DIJKSTRA**
+```
+📂 backend/
+├── 📄 grafo.c / grafo.h           # Estruturas do grafo
+├── 📄 grafo_db.c / grafo_db.h     # Interface de dados
+├── 📄 grafo_data.c                # DADOS PRINCIPAIS (BANCO 1)
+├── 📄 grafo_algoritmos.h          # 🆕 NOVO: Cabeçalho do Dijkstra
+├── 📄 grafo_algoritmos.c          # 🆕 NOVO: Implementação Dijkstra
+├── 📄 main.c                      # Interface Python→C
+├── 📄 router.dll                  # DLL gerada
+└── 📄 COMPILE.BAT                 # Script de compilação
+```
+
+### **2. FRONTEND (Python) - INTERFACE DO USUÁRIO**
+```
+📂 frontend/
+├── 📄 app.py                      # Aplicação principal
+├── 📄 navegacao.py                # Comunicação com DLL C
+├── 📄 assets/                     # Imagens, ícones
+│   ├── 🖼️ mapa.png               # Imagem do mapa (fundo)
+│   └── 📍 pins/                   # Pins para categorias
+└── 📄 banco_dados_2.json          # 🆕 FUTURO: Banco visual (BANCO 2)
+```
+
+---
+
+## 💾 **SISTEMA DE BANCO DE DADOS DUPLO**
+
+### **📊 BANCO DE DADOS 1 (GRAFO - PRINCIPAL)**
+**Localização:** `grafo_data.c` (já existe)
+**Propósito:** Cálculo do Dijkstra
+**Contém:**
+- **Vértices:** ID, nome, categoria, coordenadas **DA CALÇADA**
+- **Arestas:** Conexões entre vértices com distâncias
+
+**Exemplo:**
+```c
+{22, "Pastelaria Pasteten Platz", "Restaurante", "R. 7 de Setembro", 1, 194, 146}
+// Coordenadas (194, 146) = posição NA CALÇADA
+```
+
+### **📊 BANCO DE DADOS 2 (VISUAL - FUTURO)**
+**Localização:** `banco_dados_2.json` (a criar)
+**Propósito:** Visualização bonita no mapa
+**Conterá:**
+- **ID** (mesmo do Banco 1)
+- **Coordenadas EM CIMA DO ESTABELECIMENTO**
+- Nome, categoria (redundante, mas para conveniência)
+
+**Exemplo:**
+```json
+{
+  "22": {
+    "nome": "Pastelaria Pasteten Platz",
+    "categoria": "Restaurante",
+    "x_visual": 210,
+    "y_visual": 140,
+    "pin": "restaurante.png"
+  }
+}
+```
+
+### **🔗 LINKAGEM DOS BANCOS:**
+```
+FRONTEND mostra lista → Usa Banco 2 (visual)
+Usuário seleciona ID: 22 → Passa ID para Dijkstra
+Dijkstra calcula → Usa Banco 1 (coordenadas calçada)
+Frontend desenha rota → Usa Banco 1 (coordenadas calçada)
+Frontend mostra pin → Usa Banco 2 (coordenadas visual)
+```
+
+---
+
+## 🎨 **INTERFACE DO USUÁRIO (LAYOUT FINAL)**
+
+### **TELA PRINCIPAL (sem menu):**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🗺️ SISTEMA DE NAVEGAÇÃO - DIJKSTRA                           │
+├─────────────┬───────────────────────────────────────────────┤
+│             │                                               │
+│  📋 LISTA   │                🗺️ MAPA                         │
+│  DE PONTOS  │                (imagem de fundo)              │
+│             │                                               │
+│  [Pesquisar]│                [ROTA DESENHADA]               │
+│  ID | Nome  │                [Marcadores]                   │
+│  22 | Past..│                                               │
+│  23 | BOTE..│                                               │
+│  ...        │                                               │
+│             │                                               │
+├─────────────┼───────────────────────────────────────────────┤
+│  🎯 SELEÇÃO │                📊 RESULTADOS                   │
+│  Origem: ...│                Distância: 450m                │
+│  Destino: ..│                Pontos: 17                     │
+│             │                Log: [mensagens]               │
+├─────────────┼───────────────────────────────────────────────┤
+│  🚀 [Calcular Rota]  🗑️ [Limpar Rota]                         │
+└─────────────┴───────────────────────────────────────────────┘
+```
+
+### **COMPORTAMENTO DA INTERFACE:**
+1. **Abertura:** Direto para tela do mapa (sem menu)
+2. **Lista:** Carrega pontos do Banco 1 (inicialmente, depois Banco 2)
+3. **Seleção:** Duplo clique na lista → escolher Origem/Destino
+4. **Mapa:** Mostra imagem do mapa + pins (futuro: Banco 2)
+5. **Cálculo:** Botão habilitado apenas com origem E destino
+6. **Limpeza:** Remove rota, permite nova seleção
+
+---
+
+## 🔄 **FLUXO DE TRABALHO COMPLETO**
+
+### **FASE 0: PREPARAÇÃO (DEV)**
+```
+1. Compilar backend: COMPILE.BAT
+2. Verificar router.dll gerada
+3. Preparar imagem mapa.png em assets/
+```
+
+### **FASE 1: USUÁRIO INICIA APLICAÇÃO**
+```
+App abre → Carrega DLL C → Carrega lista do Banco 1 → Exibe tela do mapa
+```
+
+### **FASE 2: SELEÇÃO DE PONTOS**
+```
+1. Usuário dá duplo clique em "Pastelaria" na lista
+2. Popup: "Selecionar como Origem ou Destino?"
+3. Escolhe "Origem" → ID 22 armazenado
+4. Repete para "McDonald's" como Destino → ID 114 armazenado
+```
+
+### **FASE 3: CÁLCULO DA ROTA**
+```
+1. Usuário clica "Calcular Rota"
+2. Frontend chama: calcular_rota(22, 114)
+3. Backend C executa Dijkstra (usa Banco 1)
+4. Retorna: sequência de IDs + distância
+```
+
+### **FASE 4: VISUALIZAÇÃO**
+```
+1. Frontend converte IDs → coordenadas (Banco 1)
+2. Desenha linhas conectando pontos no mapa
+3. Mostra marcadores de origem/destino
+4. Exibe distância e informações
+```
+
+### **FASE 5: MANUTENÇÃO**
+```
+1. "Limpar Rota" → remove tudo, reseta estado
+2. Nova seleção possível
+```
+
+---
+
+## ⚠️ **PONTOS DE ATENÇÃO PARA A IA**
+
+### **1. REMOÇÃO DO MENU:**
+- **ANTES:** Tela inicial com 2 opções → menu
+- **DEPOIS:** Abertura direta no mapa → sem menu
+- **AÇÃO:** Remover toda lógica de menu, ir direto para tela do mapa
+
+### **2. BANCO DE DADOS 2 (FUTURO):**
+- **NÃO IMPLEMENTAR AGORA** - apenas planejar
+- **OBJETIVO:** Ter coordenadas visuais diferentes das do grafo
+- **INTEGRAÇÃO:** Mesmo ID, coordenadas diferentes
+- **VISUAL:** Pins bonitos em cima dos estabelecimentos
+
+### **3. SELEÇÃO POR LISTA (NÃO POR CLIQUE NO MAPA):**
+- **MÉTODO:** Usuário seleciona da lista de nomes
+- **RAZÃO:** Mais preciso, evita erro de clique
+- **IMPLEMENTAÇÃO:** Treeview com duplo clique
+
+### **4. COORDENADAS PARA DESENHO:**
+- **PARA DIJKSTRA:** Usar Banco 1 (calçadas)
+- **PARA DESENHO:** Usar Banco 1 (calçadas) - mesma para consistência
+- **PARA PINS:** Futuro: Banco 2 (em cima do estabelecimento)
+
+### **5. VALIDAÇÕES IMPORTANTES:**
+- Não permitir origem = destino
+- Não permitir calcular sem ambos selecionados
+- Não permitir nova rota sem limpar anterior
+- Verificar se DLL carregou corretamente
+
+### **6. ESTADO DA APLICAÇÃO:**
+- **Habilitado:** Quando origem E destino selecionados
+- **Calculando:** Desabilitar botão durante cálculo
+- **Com rota:** Habilitar botão "Limpar"
+- **Sem rota:** Desabilitar botão "Limpar"
+
+---
+
+## 🎯 **PRIORIDADES DE IMPLEMENTAÇÃO**
+
+### **PRIORIDADE 1 (CRÍTICO):**
+1. Remover menu inicial
+2. Implementar Dijkstra no backend
+3. Interface básica com lista
+4. Comunicação Python↔C funcional
+
+### **PRIORIDADE 2 (IMPORTANTE):**
+1. Desenho da rota no mapa
+2. Validações e tratamento de erros
+3. Botão de limpeza funcional
+4. Feedback visual adequado
+
+### **PRIORIDADE 3 (FUTURO):**
+1. Banco de dados 2 (visual)
+2. Pins diferentes por categoria
+3. Zoom/pan no mapa
+4. Otimizações de performance
+
+---
+
+## 🔧 **COMANDOS PARA TESTE**
+
+### **BACKEND:**
+```bash
+# Compilar
+cd backend
+COMPILE.BAT
+
+# Verificar DLL
+dir router.dll
+```
+
+### **FRONTEND:**
+```bash
+# Executar
+python app.py
+
+# Testar comunicação
+python -c "from navegacao import RouterLib; r = RouterLib(); print(r.testar_conexao())"
+```
+
+---
+
+## ❓ **PERGUNTAS FREQUENTES PARA A IA**
+
+### **Q: Como lidar com diferentes escalas de coordenadas?**
+**A:** O mapa tem coordenadas específicas. As coordenadas do Banco 1 são para o mapa. Pode ser necessário escalonar se a imagem do mapa for diferente.
+
+### **Q: E se o usuário tentar calcular sem selecionar pontos?**
+**A:** Botão "Calcular" deve estar DESABILITADO. Validação no clique também.
+
+### **Q: Como evitar vazamento de memória?**
+**A:** Sempre chamar `liberar_resultado()` após usar `calcular_rota()`.
+
+### **Q: E se a DLL não carregar?**
+**A:** Mostrar erro claro e desabilitar todas as funcionalidades.
+
+### **Q: Como testar se o Dijkstra está funcionando?**
+**A:** Testar rota conhecida: ID 22 → ID 114 deve retornar sequência específica.
+
+---
+
+## 🚀 **CHECKLIST FINAL PARA A IA**
+
+- [ ] **Remover menu inicial** - ir direto para tela do mapa
+- [ ] **Backend Dijkstra completo** - com todas as funções C
+- [ ] **Interface com lista** - Treeview para seleção
+- [ ] **Mapa funcional** - imagem de fundo + desenho de rotas
+- [ ] **Validações** - origem≠destino, seleção completa
+- [ ] **Botões controlados por estado** - habilitar/desabilitar
+- [ ] **Sistema de limpeza** - resetar estado completamente
+- [ ] **Feedback ao usuário** - log de operações
+- [ ] **Tratamento de erros** - DLL, cálculo, seleção
+- [ ] **Documentação no código** - explicar fluxo importante
+
+**Este guia fornece contexto completo para a IA entender TODO o sistema antes de implementar.** 🎯

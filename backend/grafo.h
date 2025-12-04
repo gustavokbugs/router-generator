@@ -28,26 +28,11 @@ typedef struct {
     Aresta** lista_adj;
 } Grafo;
 
-/* Estruturas para Resultados */
-typedef struct {
-    int* sequencia_ids;
-    int num_ids;
-    int distancia_total;
-    int* ids_pontos_interesse;
-    int num_pontos_interesse;
-} ResultadoRota;
-
-typedef struct {
-    int* distancias;
-    int* anteriores;
-    int* visitados;
-    int num_vertices;
-} DadosDijkstra;
-
 /* Protótipos das Funções do Grafo */
 Grafo* criar_grafo();
 void adicionar_vertice(Grafo* g, int id, const char* nome, const char* categoria, const char* rua, int tipo, int x, int y);
 void adicionar_aresta(Grafo* g, int origem, int destino, int distancia);
 void destruir_grafo(Grafo* g);
+int encontrar_indice_vertice(Grafo* g, int id);
 
 #endif
