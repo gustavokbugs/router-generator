@@ -52,7 +52,7 @@ void adicionar_vertice(Grafo* g, int id, const char* nome, const char* categoria
 }
 
 /* Encontra o índice de um vértice pelo ID */
-static int encontrar_indice_vertice(Grafo* g, int id) {
+int encontrar_indice_vertice(Grafo* g, int id) {
     int i;
     for (i = 0; i < g->num_vertices; i++) {
         if (g->vertices[i].id == id) {
@@ -71,13 +71,15 @@ void adicionar_aresta(Grafo* g, int origem, int destino, int distancia) {
     int idx_origem = encontrar_indice_vertice(g, origem);
     
     if (idx_origem == -1) {
-        printf("Vértice de origem %d não encontrado\n", origem);
+        /* Comentado para reduzir ruído - aresta ignorada */
+        /* printf("Vértice de origem %d não encontrado\n", origem); */
         return;
     }
     
     /* Verifica se o vértice de destino existe */
     if (encontrar_indice_vertice(g, destino) == -1) {
-        printf("Vértice de destino %d não encontrado\n", destino);
+        /* Comentado para reduzir ruído - aresta ignorada */
+        /* printf("Vértice de destino %d não encontrado\n", destino); */
         return;
     }
     
