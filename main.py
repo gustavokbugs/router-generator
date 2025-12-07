@@ -345,8 +345,6 @@ class RouterLib:
             return None
     
     def obter_rua_vertice(self, id_vertice: int) -> Optional[str]:
-        """
-        Obtém o nome da rua onde está localizado um vértice.
         """Retorna nome da rua de um vértice pelo ID (ou None se não tiver)"""
         if not self.lib or not hasattr(self.lib, 'obter_rua_vertice'):
             return None
