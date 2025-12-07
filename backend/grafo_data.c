@@ -1,4 +1,23 @@
-/* Arquivo gerado automaticamente - Dados estáticos do grafo */
+/*
+ * grafo_data.c - BANCO DE DADOS ESTÁTICO DO GRAFO
+ * 
+ * Este arquivo contém todos os dados de vértices e arestas do grafo de rotas
+ * em arrays estáticos (compilados no binário da DLL).
+ * 
+ * CONTEÚDO:
+ * - 120 vértices (esquinas + pontos turísticos) com coordenadas (x, y)
+ * - 152 arestas bidirecionais com distâncias em metros
+ * 
+ * PROPÓSITO:
+ * Serve como "banco de dados" do sistema de rotas. Ao invés de ler de arquivo
+ * ou banco SQL, o programa lê destes arrays estáticos via funções de acesso.
+ * 
+ * USO:
+ * - obter_vertices_static() retorna ponteiro para VERTICES_STATIC
+ * - obter_arestas_static() retorna ponteiro para ARESTAS_STATIC
+ * - inicializar_vertices/arestas() popula o grafo dinâmico com estes dados
+ */
+
 #include "grafo_db.h"
 
 /* Array estático de vértices - 120 total */
@@ -164,7 +183,7 @@ static const ArestaData ARESTAS_STATIC[] = {
     {16, 69, 54}, {69, 12, 100}, // Q-M
     {12, 8, 154}, // M-I
     {8, 68, 14}, {68, 4, 140}, // I-E
-    {4, 67, 130}, {61, 0, 24}, // E-A
+    {4, 67, 130}, {67, 0, 24}, // E-A
     {0, 119, 44}, {119, 20, 110}, // A-U 
 
 // Rua Tenente Coronel Brito (V-R):
@@ -191,13 +210,14 @@ static const ArestaData ARESTAS_STATIC[] = {
 
 static const int ARESTAS_STATIC_COUNT = 152;
 
-/* Funções de acesso aos dados estáticos */
+/* Funções de acesso: Retornam ponteiros para arrays estáticos + quantidade de elementos */
+
 const VerticeData* obter_vertices_static(int* count) {
-    *count = VERTICES_STATIC_COUNT;
-    return VERTICES_STATIC;
+    *count = VERTICES_STATIC_COUNT;  // 120 vértices
+    return VERTICES_STATIC;          // Ponteiro para array estático
 }
 
 const ArestaData* obter_arestas_static(int* count) {
-    *count = ARESTAS_STATIC_COUNT;
+    *count = ARESTAS_STATIC_COUNT;   // 152 arestas
     return ARESTAS_STATIC;
 }
