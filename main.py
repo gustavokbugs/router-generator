@@ -1,17 +1,17 @@
 import os
 import sys
-import ctypes
+import ctypes  # Integração Python ↔ C
 from ctypes import Structure, POINTER, c_int, c_char_p, byref, create_string_buffer, cdll
 import json
 from typing import Optional, Tuple, Dict, List
 
 try:
-    import customtkinter as ctk
+    import customtkinter as ctk  # UI moderna
 except Exception:
     ctk = None
 
 try:
-    from PIL import Image, ImageTk, ImageDraw
+    from PIL import Image, ImageTk, ImageDraw  # Manipulação de imagens
 except Exception:
     Image = None
     ImageTk = None
@@ -21,34 +21,33 @@ import tkinter as tk
 from tkinter import messagebox
 
 
-# ============================================
-# 🆕 ESTRUTURA C: ResultadoRota
-# ============================================
+# Estrutura C mapeada em Python via ctypes
 class ResultadoRota(Structure):
     _fields_ = [
-        ("sequencia_ids", POINTER(c_int)),  # Array de IDs do caminho
-        ("num_ids", c_int),                  # Quantidade de IDs
-        ("distancia_total", c_int)           # Distância em metros
+        ("sequencia_ids", POINTER(c_int)),  # Array de IDs do caminho calculado
+        ("num_ids", c_int),                  # Quantidade de vértices na rota
+        ("distancia_total", c_int)           # Distância total em metros
     ]
 
 
 def resource_path(filename: str) -> str:
+    """Retorna caminho absoluto do arquivo (funciona em dev e após empacotamento)"""
     base = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base, filename)
 
 
 class RouterLib:
-    """Wrapper to load a C library that provides route generation."""
+    """Wrapper para carregar e usar a biblioteca C (DLL/SO) de rotas"""
 
     def __init__(self):
-        self.lib = None
-        self.pontos_info = {}  # Dicionário: id -> (nome, categoria)
+        self.lib = None  # Referência para DLL carregada
+        self.pontos_info = {}  # Cache: id -> (nome, categoria)
         self._load_lib()
         self._load_pontos_info()
 
     def _load_lib(self):
-        """Carrega DLL e configura TODAS as funções C"""
-        candidates = [
+        """Localiza e carrega DLL/SO, configura assinaturas de funções C"""
+        candidates = [  # Tenta múltiplos caminhos (Windows/Linux/Mac)
             resource_path('backend\\router.dll'),
             resource_path('backend\\librouter.dll'),
             resource_path('router.dll'),
@@ -59,14 +58,14 @@ class RouterLib:
         for path in candidates:
             if os.path.exists(path):
                 try:
-                    self.lib = ctypes.CDLL(path)
+                    self.lib = ctypes.CDLL(path)  # Carrega biblioteca compartilhada
                     
-                    # Configurar função de teste
+                    # Configura função de teste (opcional)
                     if hasattr(self.lib, 'get_test_message'):
                         self.lib.get_test_message.argtypes = []
                         self.lib.get_test_message.restype = ctypes.c_char_p
                     
-                    # Configurar funções para obter pontos turísticos
+                    # Configura funções para obter pontos turísticos
                     if hasattr(self.lib, 'get_num_pontos'):
                         self.lib.get_num_pontos.argtypes = []
                         self.lib.get_num_pontos.restype = ctypes.c_int
@@ -74,19 +73,17 @@ class RouterLib:
                     if hasattr(self.lib, 'get_ponto_info'):
                         self.lib.get_ponto_info.argtypes = [
                             ctypes.c_int,           # index
-                            ctypes.c_char_p,        # nome_out
-                            ctypes.c_int,           # nome_len
-                            ctypes.c_char_p,        # categoria_out
-                            ctypes.c_int,           # cat_len
-                            ctypes.POINTER(ctypes.c_int),  # id_out
-                            ctypes.POINTER(ctypes.c_int),  # x_out
-                            ctypes.POINTER(ctypes.c_int)   # y_out
+                            ctypes.c_char_p,        # buffer nome
+                            ctypes.c_int,           # tamanho buffer nome
+                            ctypes.c_char_p,        # buffer categoria
+                            ctypes.c_int,           # tamanho buffer categoria
+                            ctypes.POINTER(ctypes.c_int),  # ponteiro para id
+                            ctypes.POINTER(ctypes.c_int),  # ponteiro para x
+                            ctypes.POINTER(ctypes.c_int)   # ponteiro para y
                         ]
                         self.lib.get_ponto_info.restype = ctypes.c_int
                     
-                    # ===== NOVAS FUNÇÕES DIJKSTRA =====
-                    
-                    # Estrutura ResultadoRota
+                    # Estrutura ResultadoRota (mesma definição do C)
                     class ResultadoRota(ctypes.Structure):
                         _fields_ = [
                             ("sequencia_ids", ctypes.POINTER(ctypes.c_int)),
@@ -96,31 +93,40 @@ class RouterLib:
                     
                     self.ResultadoRota = ResultadoRota
                     
-                    # calcular_rota(int id_origem, int id_destino)
+                    # Função principal: calcular_rota
                     if hasattr(self.lib, 'calcular_rota'):
                         self.lib.calcular_rota.argtypes = [ctypes.c_int, ctypes.c_int]
                         self.lib.calcular_rota.restype = ctypes.POINTER(ResultadoRota)
                     
-                    # liberar_resultado(ResultadoRota* resultado)
+                    # Função: liberar_resultado - libera memória alocada pela rota
                     if hasattr(self.lib, 'liberar_resultado'):
                         self.lib.liberar_resultado.argtypes = [ctypes.POINTER(ResultadoRota)]
                         self.lib.liberar_resultado.restype = None
                     
-                    # obter_info_vertice(int id, ...)
+                    # Função: obter_info_vertice - retorna nome, categoria e coords de um vértice
                     if hasattr(self.lib, 'obter_info_vertice'):
                         self.lib.obter_info_vertice.argtypes = [
-                            ctypes.c_int,
-                            ctypes.c_char_p, ctypes.c_int,
-                            ctypes.c_char_p, ctypes.c_int,
-                            ctypes.POINTER(ctypes.c_int),
-                            ctypes.POINTER(ctypes.c_int)
+                            ctypes.c_int,                    # id do vértice
+                            ctypes.c_char_p, ctypes.c_int,  # buffer nome + tamanho
+                            ctypes.c_char_p, ctypes.c_int,  # buffer categoria + tamanho
+                            ctypes.POINTER(ctypes.c_int),   # x_out
+                            ctypes.POINTER(ctypes.c_int)    # y_out
                         ]
                         self.lib.obter_info_vertice.restype = ctypes.c_int
                     
-                    # obter_numero_total_vertices()
+                    # Função: obter_numero_total_vertices - retorna quantidade de vértices no grafo
                     if hasattr(self.lib, 'obter_numero_total_vertices'):
                         self.lib.obter_numero_total_vertices.argtypes = []
                         self.lib.obter_numero_total_vertices.restype = ctypes.c_int
+                    
+                    # Função: obter_rua_vertice - retorna nome da rua de um vértice
+                    if hasattr(self.lib, 'obter_rua_vertice'):
+                        self.lib.obter_rua_vertice.argtypes = [
+                            ctypes.c_int,       # id do vértice
+                            ctypes.c_char_p,    # buffer de saída
+                            ctypes.c_int        # tamanho do buffer
+                        ]
+                        self.lib.obter_rua_vertice.restype = ctypes.c_int
                     
                     print("✅ DLL carregada e configurada com sucesso")
                     return
@@ -129,7 +135,7 @@ class RouterLib:
                     self.lib = None
 
     def _load_pontos_info(self):
-        """Carrega informações de nome e categoria dos pontos do backend C"""
+        """Cache de pontos turísticos do backend C (exclui esquinas)"""
         if not self.lib or not hasattr(self.lib, 'get_num_pontos') or not hasattr(self.lib, 'get_ponto_info'):
             print("⚠️ Funções de pontos não disponíveis no backend")
             return
@@ -139,12 +145,14 @@ class RouterLib:
             print(f"📋 Carregando {num_pontos} pontos turísticos...")
             
             for i in range(num_pontos):
+                # Aloca buffers para receber strings do C
                 nome_buf = ctypes.create_string_buffer(100)
                 cat_buf = ctypes.create_string_buffer(50)
                 id_val = ctypes.c_int()
                 x_val = ctypes.c_int()
                 y_val = ctypes.c_int()
                 
+                # Chama função C para obter dados do ponto
                 result = self.lib.get_ponto_info(
                     i, 
                     nome_buf, 100, 
@@ -159,7 +167,7 @@ class RouterLib:
                     categoria = cat_buf.value.decode('utf-8', errors='ignore')
                     ponto_id = id_val.value
                     
-                    # Apenas pontos turísticos (não esquinas)
+                    # Armazena apenas pontos turísticos (não esquinas)
                     if categoria != "Esquina" and categoria:
                         self.pontos_info[ponto_id] = (nome, categoria)
         
@@ -167,17 +175,14 @@ class RouterLib:
             print(f"Erro ao carregar pontos turísticos: {e}")
     
     def carregar_lista_pontos(self) -> List[Dict]:
-        """
-        Carrega TODOS os pontos do BANCO 1 para a lista do frontend.
-        Usa coordenadas dos VÉRTICES (calçadas) para Dijkstra.
-        """
+        """Retorna lista de todos os vértices do grafo (banco de rotas) com nome, categoria e coordenadas"""
         if not self.lib:
             print("❌ Biblioteca C não carregada")
             return []
         
         pontos = []
         try:
-            # 1. Obter número total de vértices
+            # Obtém quantidade total de vértices no grafo
             if not hasattr(self.lib, 'obter_numero_total_vertices'):
                 print("⚠️ Função obter_numero_total_vertices não disponível")
                 return []
@@ -185,33 +190,33 @@ class RouterLib:
             num_vertices = self.lib.obter_numero_total_vertices()
             print(f"📊 Total de vértices disponíveis: {num_vertices}")
             
-            # 2. Para cada vértice, obter informações
+            # Itera sobre cada vértice para obter informações
             for id_vertice in range(num_vertices):
-                # Buffers para informações
+                # Aloca buffers para receber dados
                 nome_buf = ctypes.create_string_buffer(100)
                 categoria_buf = ctypes.create_string_buffer(50)
                 x = ctypes.c_int()
                 y = ctypes.c_int()
                 
-                # 3. Chamar função C para obter informações
+                # Chama função C para obter dados do vértice
                 resultado = self.lib.obter_info_vertice(
                     id_vertice,
-                    nome_buf, 100,        # Nome com limite de 100 chars
-                    categoria_buf, 50,    # Categoria com limite de 50 chars
-                    ctypes.byref(x),      # Coordenada X (calçada)
-                    ctypes.byref(y)       # Coordenada Y (calçada)
+                    nome_buf, 100,        # Buffer nome com 100 bytes
+                    categoria_buf, 50,    # Buffer categoria com 50 bytes
+                    ctypes.byref(x),      # Coordenada X (do grafo de rotas)
+                    ctypes.byref(y)       # Coordenada Y (do grafo de rotas)
                 )
                 
-                # 4. Se sucesso, adicionar à lista
+                # Se sucesso (0), adiciona à lista
                 if resultado == 0:
                     ponto = {
                         'id': id_vertice,
                         'nome': nome_buf.value.decode('utf-8', errors='ignore'),
                         'categoria': categoria_buf.value.decode('utf-8', errors='ignore'),
-                        'x_vertice': x.value,    # ✅ Coordenada do VÉRTICE (calçada)
-                        'y_vertice': y.value,    # ✅ Para Dijkstra e desenho da rota
-                        'x_visual': x.value,     # ⏳ Futuro: coordenada visual (BANCO 2)
-                        'y_visual': y.value      # ⏳ Futuro: coordenada visual (BANCO 2)
+                        'x_vertice': x.value,    # Coordenada do vértice (usada no Dijkstra)
+                        'y_vertice': y.value,    # Coordenada do vértice (usada no Dijkstra)
+                        'x_visual': x.value,     # Coordenada visual (mesmo valor por enquanto)
+                        'y_visual': y.value      # Coordenada visual (mesmo valor por enquanto)
                     }
                     pontos.append(ponto)
             
@@ -223,7 +228,7 @@ class RouterLib:
             return []
 
     def get_test_message(self) -> str:
-        """Obtém mensagem de teste do backend C"""
+        """Retorna mensagem de teste do backend C (verifica se DLL está funcional)"""
         if self.lib and hasattr(self.lib, 'get_test_message'):
             try:
                 result = self.lib.get_test_message()
@@ -234,6 +239,7 @@ class RouterLib:
         return '⚠️ Biblioteca C não carregada (usando simulação Python)'
 
     def generate_route(self, sx: int, sy: int, ex: int, ey: int) -> str:
+        """Gera rota interpolada entre dois pontos (função legada de simulação)"""
         if self.lib and hasattr(self.lib, 'generate_route'):
             buf_len = 8192
             buf = ctypes.create_string_buffer(buf_len)
@@ -246,7 +252,7 @@ class RouterLib:
             except Exception as e:
                 return f'C library call failed: {e}'
 
-        # Fallback simulation
+        # Fallback: simulação de linha reta
         steps = max(2, int(max(abs(ex - sx), abs(ey - sy)) / 20))
         pts = []
         for i in range(steps + 1):
@@ -257,15 +263,12 @@ class RouterLib:
         return '\n'.join(f'{x},{y}' for x, y in pts)
 
     def calcular_rota_dijkstra(self, id_origem: int, id_destino: int) -> Optional[Dict]:
-        """
-        Calcula rota usando Dijkstra no backend C.
-        Retorna dicionário com sequência de IDs e distância.
-        """
+        """Calcula menor caminho usando Dijkstra no backend C. Retorna dict com IDs e distância."""
         if not self.lib:
             print("❌ Biblioteca C não carregada")
             return None
         
-        # ⚠️ VALIDAÇÃO: origem != destino
+        # Validação: origem e destino diferentes
         if id_origem == id_destino:
             print("❌ Origem e destino são iguais")
             return None
@@ -273,32 +276,32 @@ class RouterLib:
         try:
             print(f"🔄 Calculando rota Dijkstra: {id_origem} → {id_destino}")
             
-            # 1. CHAMAR FUNÇÃO C PRINCIPAL
+            # Chama função C que executa Dijkstra
             resultado_ptr = self.lib.calcular_rota(id_origem, id_destino)
             
-            # 2. VERIFICAR SE FOI POSSÍVEL CALCULAR
+            # Verifica se rota foi encontrada (NULL = sem caminho)
             if not resultado_ptr:
                 print("❌ Não foi possível calcular a rota (retornou NULL)")
                 return None
             
-            # 3. EXTRAIR RESULTADO
+            # Acessa estrutura ResultadoRota retornada
             resultado = resultado_ptr.contents
             
-            # 4. CONVERTER PARA DICIONÁRIO PYTHON
+            # Converte para dicionário Python
             rota_dict = {
                 'sequencia_ids': [],
                 'num_ids': resultado.num_ids,
                 'distancia_total': resultado.distancia_total
             }
             
-            # 5. EXTRAIR SEQUÊNCIA DE IDs
+            # Copia array de IDs do C para lista Python
             for i in range(resultado.num_ids):
                 rota_dict['sequencia_ids'].append(resultado.sequencia_ids[i])
             
             print(f"✅ Rota calculada: {rota_dict['num_ids']} pontos, "
                   f"{rota_dict['distancia_total']} metros")
             
-            # 6. LIBERAR MEMÓRIA C
+            # Libera memória alocada no C
             self.lib.liberar_resultado(resultado_ptr)
             
             return rota_dict
@@ -310,17 +313,11 @@ class RouterLib:
             return None
 
     def obter_coordenadas_por_id(self, ponto_id: int) -> Optional[Tuple[int, int]]:
-        """
-        Obtém coordenadas (x, y) de um ponto pelo ID usando backend C.
-        (Compatibilidade com código antigo)
-        """
+        """Alias para obter_coordenadas_vertice (compatibilidade)"""
         return self.obter_coordenadas_vertice(ponto_id)
     
     def obter_coordenadas_vertice(self, id_vertice: int) -> Optional[Tuple[int, int]]:
-        """
-        Obtém coordenadas do VÉRTICE (calçada) para um ID específico.
-        Usado para desenhar a rota no mapa.
-        """
+        """Retorna (x, y) de um vértice pelo ID. Usado para desenhar rota no canvas."""
         if not self.lib:
             return None
         
@@ -328,7 +325,7 @@ class RouterLib:
             x = ctypes.c_int()
             y = ctypes.c_int()
             
-            # ⚠️ IMPORTANTE: Usa obter_info_vertice que retorna coordenadas do VÉRTICE
+            # Chama função C para obter coordenadas (ignora nome e categoria)
             resultado = self.lib.obter_info_vertice(
                 id_vertice,
                 None, 0,   # Não precisa do nome
@@ -346,12 +343,38 @@ class RouterLib:
         except Exception as e:
             print(f"❌ Erro ao obter coordenadas: {e}")
             return None
+    
+    def obter_rua_vertice(self, id_vertice: int) -> Optional[str]:
+        """
+        Obtém o nome da rua onde está localizado um vértice.
+        """Retorna nome da rua de um vértice pelo ID (ou None se não tiver)"""
+        if not self.lib or not hasattr(self.lib, 'obter_rua_vertice'):
+            return None
+        
+        try:
+            rua_buf = ctypes.create_string_buffer(100)
+            resultado = self.lib.obter_rua_vertice(
+                id_vertice,
+                rua_buf,
+                100
+            )
+            
+            if resultado == 0:
+                rua = rua_buf.value.decode('utf-8', errors='ignore')
+                # Filtra ruas "N/A" (esquinas sem nome)
+                if rua and rua != "N/A":
+                    return rua
+            return None
+                
+        except Exception as e:
+            print(f"❌ Erro ao obter rua: {e}")
+            return None
 
 
 class ModernMapApp:
-    """Aplicação de navegação com origem -> destino único"""
+    """Interface gráfica principal: mapa interativo + seleção origem/destino + visualização de rota"""
     
-    # Mapeamento de categorias para ícones
+    # Mapeamento categoria → arquivo de ícone
     CATEGORIA_ICONE = {
         "Adega": "Adega.png",
         "Banco": "Banco.png",
@@ -386,19 +409,19 @@ class ModernMapApp:
             messagebox.showerror('Dependência ausente', 'Pillow não está instalado. Instale com: pip install pillow')
             raise SystemExit(1)
 
-        # Carregar imagem do mapa
+        # Carrega imagem base do mapa
         self.original_image = Image.open(self.image_path)
 
-        # Router library wrapper
+        # Inicializa wrapper para biblioteca C
         self.router = RouterLib()
 
-        # Carregar pins.json
+        # Carrega coordenadas visuais (pins.json)
         self.pins = self._load_pins()
         
-        # Carregar ícones
+        # Carrega ícones de categorias
         self.icones = self._load_icons()
 
-        # UI com tema moderno
+        # Configura tema visual moderno (CustomTkinter ou Tkinter padrão)
         if ctk:
             ctk.set_appearance_mode('Dark')
             ctk.set_default_color_theme('blue')
@@ -409,47 +432,48 @@ class ModernMapApp:
             self.is_ctk = False
 
         self.root.title("Sistema de Navegação - Origem → Destino")
-        self.root.geometry('1400x900')
-        self.root.minsize(1200, 700)
+        self.root.geometry('1600x900')
+        self.root.minsize(1400, 500)
 
-        # Configure grid para layout responsivo
-        self.root.grid_columnconfigure(0, weight=0)  # Painel de controles
-        self.root.grid_columnconfigure(1, weight=1)  # Área do mapa
+        # Layout responsivo: painel lateral fixo + mapa flexível
+        self.root.grid_columnconfigure(0, weight=0)  # Painel de controles (largura fixa)
+        self.root.grid_columnconfigure(1, weight=1)  # Canvas do mapa (expansível)
         self.root.grid_rowconfigure(0, weight=1)
 
-        # Estado
-        self.scale = 1.0
-        self.canvas_img_id = None
-        self.tk_image = None
-        self.origin_id: Optional[int] = None  # ID do ponto de origem
-        self.destination_id: Optional[int] = None  # ID do ponto de destino
-        self.markers: List[int] = []
-        self.icon_markers: Dict[int, int] = {}  # id -> canvas_id
-        self.pan_x = 0
-        self.pan_y = 0
-        self._drag_start = None
-        self._search_debounce_id = None  # Para debounce da busca
-        self._lazy_load_id = None  # Para lazy loading da lista
-        self._all_pontos = []  # Cache de todos os pontos
-        self._loaded_count = 0  # Contador de itens carregados
-        self.BATCH_SIZE = 20  # Carregar 20 itens por vez
-        self.route_active = False  # Flag para indicar se há uma rota ativa
-        self.route_lines: List[int] = []
+        # Estado da aplicação
+        self.scale = 1.0  # Nível de zoom
+        self.canvas_img_id = None  # ID da imagem no canvas
+        self.tk_image = None  # Referência ImageTk (evita garbage collection)
+        self.origin_id: Optional[int] = None  # ID do ponto de origem selecionado
+        self.destination_id: Optional[int] = None  # ID do ponto de destino selecionado
+        self.markers: List[int] = []  # IDs dos marcadores desenhados (círculos)
+        self.icon_markers: Dict[int, int] = {}  # id_ponto → canvas_id do ícone
+        self.pan_x = 0  # Offset horizontal do pan
+        self.pan_y = 0  # Offset vertical do pan
+        self._drag_start = None  # Posição inicial do arrasto
+        self._search_debounce_id = None  # Timer para debounce da busca
+        self._lazy_load_id = None  # Timer para lazy loading da lista
+        self._all_pontos = []  # Cache de todos os pontos carregados
+        self._loaded_count = 0  # Quantidade de itens já carregados na lista
+        self.BATCH_SIZE = 20  # Carregar 20 itens por vez (performance)
+        self.route_active = False  # Flag: há rota calculada e desenhada?
+        self.route_lines: List[int] = []  # IDs das linhas da rota no canvas
+        self._pontos_cache = None  # Cache dos pontos turísticos
 
-        # Build UI
+        # Constrói interface gráfica
         self._build_ui()
 
-        # Renderização inicial
-        self.root.after(100, self._update_canvas_image)
-        self.root.after(200, self._draw_all_icons)
-
+        # Renderização inicial (após construção da UI)
+        self.root.after(100, self._update_canvas_image)  # Desenha mapa
+        self.root.after(200, self._draw_all_icons)  # Desenha ícones
+        
     def _load_pins(self) -> Dict:
-        """Carrega o arquivo pins.json"""
+        """Carrega coordenadas visuais do arquivo pins.json. Retorna dict: id → (x, y)"""
         pins_path = resource_path('pins.json')
         try:
             with open(pins_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # Converter para dict com id como chave
+                # Converte lista para dicionário indexado por ID
                 pins_dict = {}
                 for pin in data['pins']:
                     pins_dict[pin['id']] = (pin['x'], pin['y'])
@@ -460,7 +484,7 @@ class ModernMapApp:
             return {}
 
     def _load_icons(self) -> Dict:
-        """Carrega todos os ícones da pasta assets"""
+        """Carrega imagens de ícones da pasta assets/. Retorna dict: categoria → PhotoImage"""
         icons = {}
         assets_path = resource_path('assets')
         
@@ -473,7 +497,7 @@ class ModernMapApp:
             if os.path.exists(icon_path):
                 try:
                     img = Image.open(icon_path)
-                    # Redimensionar para tamanho padrão
+                    # Redimensiona para tamanho padrão (20x20 pixels)
                     img = img.resize((32, 32), Image.Resampling.LANCZOS)
                     icons[filename] = img
                 except Exception as e:
@@ -482,14 +506,36 @@ class ModernMapApp:
         return icons
 
     def _build_ui(self):
-        # Painel esquerdo - Controles
-        if self.is_ctk:
-            self.control_frame = ctk.CTkFrame(self.root, width=380, corner_radius=15)
-        else:
-            self.control_frame = tk.Frame(self.root, width=380, bg='#2b2b2b')
+        # Container para painel esquerdo com scroll - MAIOR E DINÂMICO
+        container_frame = tk.Frame(self.root, bg='#2b2b2b')
+        container_frame.grid(row=0, column=0, sticky="nsew", padx=(10, 5), pady=10)
+        container_frame.grid_columnconfigure(0, minsize=520)  # Largura mínima aumentada
         
-        self.control_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        self.control_frame.grid_propagate(False)
+        # Canvas para scroll - com largura dinâmica
+        canvas_scroll = tk.Canvas(container_frame, bg='#2b2b2b', highlightthickness=0, width=520)
+        scrollbar = tk.Scrollbar(container_frame, orient='vertical', command=canvas_scroll.yview)
+        
+        # Painel esquerdo - Controles (dentro do canvas)
+        if self.is_ctk:
+            self.control_frame = ctk.CTkFrame(canvas_scroll, corner_radius=15, fg_color='#2b2b2b', width=500)
+        else:
+            self.control_frame = tk.Frame(canvas_scroll, bg='#2b2b2b', width=500)
+        
+        # Configurar scrollregion dinamicamente
+        def update_scrollregion(event=None):
+            canvas_scroll.configure(scrollregion=canvas_scroll.bbox('all'))
+        
+        self.control_frame.bind('<Configure>', update_scrollregion)
+        canvas_scroll.create_window((10, 0), window=self.control_frame, anchor='nw')
+        canvas_scroll.configure(yscrollcommand=scrollbar.set)
+        
+        canvas_scroll.pack(side='left', fill='both', expand=True)
+        scrollbar.pack(side='right', fill='y')
+        
+        # Bind scroll do mouse
+        def _on_mousewheel(event):
+            canvas_scroll.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas_scroll.bind_all("<MouseWheel>", _on_mousewheel)
 
         # Painel direito - Mapa
         if self.is_ctk:
@@ -541,7 +587,7 @@ class ModernMapApp:
 
         self._create_separator()
 
-        # Seleção Atual
+        # Seleção Atual - ALTURA DINÂMICA
         if self.is_ctk:
             selection_label = ctk.CTkLabel(self.control_frame, text="SELEÇÃO ATUAL", 
                                          font=('Arial', 12, 'bold'), text_color="#4cc9f0")
@@ -551,26 +597,39 @@ class ModernMapApp:
                                      font=('Arial', 12, 'bold'), bg='#2b2b2b', fg='#4cc9f0')
             selection_label.pack(pady=(10, 5))
 
-        # Frame de seleção
+        # Frame de seleção - ALTURA DINÂMICA (não fixa)
         selection_frame = ctk.CTkFrame(self.control_frame) if self.is_ctk else tk.Frame(self.control_frame, bg='#1a1a1a')
-        selection_frame.pack(fill='x', padx=15, pady=5)
+        selection_frame.pack(fill='x', padx=15, pady=2)
+
+        # Usar Frame interno para conteúdo que se ajusta dinamicamente
+        selection_content_frame = tk.Frame(selection_frame, bg='#1a1a1a')
+        selection_content_frame.pack(fill='x', expand=True)
 
         if self.is_ctk:
-            self.origin_label = ctk.CTkLabel(selection_frame, text="📍 Origem: Não selecionada", 
+            self.origin_label = ctk.CTkLabel(selection_content_frame, text="📍 Origem: Não selecionada", 
                                            font=('Arial', 11), text_color="#ffffff", anchor='w')
-            self.origin_label.pack(fill='x', padx=10, pady=5)
+            self.origin_label.pack(fill='x', padx=10, pady=3)
             
-            self.dest_label = ctk.CTkLabel(selection_frame, text="🎯 Destino: Não selecionado", 
+            self.dest_label = ctk.CTkLabel(selection_content_frame, text="🎯 Destino: Não selecionado", 
                                          font=('Arial', 11), text_color="#ffffff", anchor='w')
-            self.dest_label.pack(fill='x', padx=10, pady=5)
-        else:
-            self.origin_label = tk.Label(selection_frame, text="📍 Origem: Não selecionada", 
-                                        font=('Arial', 10), bg='#1a1a1a', fg='#ffffff', anchor='w')
-            self.origin_label.pack(fill='x', padx=10, pady=5)
+            self.dest_label.pack(fill='x', padx=10, pady=3)
             
-            self.dest_label = tk.Label(selection_frame, text="🎯 Destino: Não selecionado", 
+            # Frame para informações da rota - ALTURA DINÂMICA
+            self.route_info_frame = ctk.CTkFrame(selection_content_frame, fg_color="transparent", height=0)
+            self.route_info_frame.pack(fill='x', padx=10, pady=3)
+            self.route_info_frame.pack_propagate(False)  # Controlar altura manualmente
+        else:
+            self.origin_label = tk.Label(selection_content_frame, text="📍 Origem: Não selecionada", 
+                                        font=('Arial', 10), bg='#1a1a1a', fg='#ffffff', anchor='w')
+            self.origin_label.pack(fill='x', padx=10, pady=3)
+            
+            self.dest_label = tk.Label(selection_content_frame, text="🎯 Destino: Não selecionado", 
                                       font=('Arial', 10), bg='#1a1a1a', fg='#ffffff', anchor='w')
-            self.dest_label.pack(fill='x', padx=10, pady=5)
+            self.dest_label.pack(fill='x', padx=10, pady=3)
+            
+            # Frame para informações da rota - ALTURA DINÂMICA
+            self.route_info_frame = tk.Frame(selection_content_frame, bg='#1a1a1a', height=0)
+            self.route_info_frame.pack(fill='x', padx=10, pady=3)
 
         self._create_separator()
 
@@ -644,16 +703,16 @@ class ModernMapApp:
             self.search_entry.bind('<FocusIn>', lambda e: self._clear_placeholder(e))
             self.search_entry.bind('<FocusOut>', lambda e: self._restore_placeholder(e))
 
-        # Frame com scroll para lista de pontos
-        list_container = ctk.CTkFrame(self.control_frame) if self.is_ctk else tk.Frame(self.control_frame, bg='#2b2b2b')
+        # Frame com scroll para lista de pontos - MAIOR
+        list_container = ctk.CTkFrame(self.control_frame, height=300) if self.is_ctk else tk.Frame(self.control_frame, bg='#2b2b2b', height=300)
         list_container.pack(fill='both', expand=True, padx=15, pady=5)
 
         if self.is_ctk:
-            scroll_frame = ctk.CTkScrollableFrame(list_container)
+            scroll_frame = ctk.CTkScrollableFrame(list_container, height=280)
             scroll_frame.pack(fill='both', expand=True)
             self.spots_container = scroll_frame
         else:
-            canvas_scroll = tk.Canvas(list_container, bg='#2b2b2b', highlightthickness=0)
+            canvas_scroll = tk.Canvas(list_container, bg='#2b2b2b', highlightthickness=0, height=280)
             scrollbar = tk.Scrollbar(list_container, orient='vertical', command=canvas_scroll.yview)
             scroll_frame = tk.Frame(canvas_scroll, bg='#2b2b2b')
             
@@ -701,41 +760,8 @@ class ModernMapApp:
                     bg="#4cc9f0", fg='white', font=('Arial', 10), height=2,
                     relief='flat', width=5).pack(side='left', fill='x', expand=True, padx=2)
 
-        self._create_separator()
-
-        # Log/Output
-        if self.is_ctk:
-            log_label = ctk.CTkLabel(self.control_frame, text="LOG", 
-                                   font=('Arial', 12, 'bold'), text_color="#4cc9f0")
-            log_label.pack(pady=(10, 5))
-        else:
-            log_label = tk.Label(self.control_frame, text="LOG", 
-                               font=('Arial', 12, 'bold'), bg='#2b2b2b', fg='#4cc9f0')
-            log_label.pack(pady=(10, 5))
-
-        text_frame = ctk.CTkFrame(self.control_frame) if self.is_ctk else tk.Frame(self.control_frame, bg='#2b2b2b')
-        text_frame.pack(fill='both', expand=True, padx=15, pady=(5, 15))
-
-        if self.is_ctk:
-            self.out_text = ctk.CTkTextbox(text_frame, font=('Consolas', 10), 
-                                         fg_color='#1a1a1a', text_color='#00ff88',
-                                         height=100)
-            self.out_text.pack(fill='both', expand=True, padx=5, pady=5)
-        else:
-            self.out_text = tk.Text(text_frame, font=('Consolas', 9), 
-                                  bg='#1a1a1a', fg='#00ff88',
-                                  insertbackground='white', wrap='word',
-                                  relief='flat', height=6)
-            scrollbar = tk.Scrollbar(text_frame, orient='vertical', command=self.out_text.yview)
-            self.out_text.configure(yscrollcommand=scrollbar.set)
-            
-            self.out_text.pack(side='left', fill='both', expand=True)
-            scrollbar.pack(side='right', fill='y')
-
-        self._log_message("✅ Aplicação iniciada. Clique em um ícone para selecionar origem/destino.")
-
     def _populate_tourist_spots(self):
-        """Popula a lista de pontos turísticos com botões - com lazy loading"""
+        """Popula a lista de pontos turísticos com botões - com lazy loading e cache"""
         # Cancelar lazy loading pendente
         if self._lazy_load_id:
             self.root.after_cancel(self._lazy_load_id)
@@ -752,17 +778,21 @@ class ModernMapApp:
         if search_text == "🔍 buscar por nome...":
             search_text = ""
         
-        # Filtrar pontos
+        # Usar cache ou criar cache na primeira vez
+        if self._pontos_cache is None:
+            self._pontos_cache = []
+            for ponto_id in sorted(self.pins.keys()):
+                if ponto_id in self.router.pontos_info:
+                    nome, categoria = self.router.pontos_info[ponto_id]
+                    self._pontos_cache.append((ponto_id, nome, categoria))
+        
+        # Filtrar pontos do cache
         filtered_pontos = []
-        for ponto_id in sorted(self.pins.keys()):
-            if ponto_id in self.router.pontos_info:
-                nome, categoria = self.router.pontos_info[ponto_id]
-                
-                # Filtrar por busca - se search_text está vazio, mostra todos
-                if search_text and search_text not in nome.lower():
-                    continue
-                
-                filtered_pontos.append((ponto_id, nome, categoria))
+        for ponto_id, nome, categoria in self._pontos_cache:
+            # Filtrar por busca - se search_text está vazio, mostra todos
+            if search_text and search_text not in nome.lower():
+                continue
+            filtered_pontos.append((ponto_id, nome, categoria))
         
         # Guardar lista filtrada e resetar contador
         self._all_pontos = filtered_pontos
@@ -869,8 +899,8 @@ class ModernMapApp:
         self._redraw_markers()
 
     def _draw_all_icons(self):
-        """Desenha todos os ícones dos pontos turísticos no mapa"""
-        # Limpar ícones existentes
+        """Renderiza ícones de todos os pontos turísticos no mapa (ou só origem/destino se há rota ativa)"""
+        # Limpa ícones existentes do canvas
         for canvas_id in self.icon_markers.values():
             try:
                 self.canvas.delete(canvas_id)
@@ -878,109 +908,109 @@ class ModernMapApp:
                 pass
         self.icon_markers.clear()
 
-        # Se há rota ativa, mostrar apenas origem e destino
+        # Se há rota ativa, mostra apenas origem e destino para clareza visual
         if self.route_active and self.origin_id and self.destination_id:
-            # Desenhar apenas origem
+            # Desenha apenas ícone de origem
             if self.origin_id in self.pins:
                 x, y = self.pins[self.origin_id]
                 nome, categoria = self.router.pontos_info.get(self.origin_id, ("Origem", "Comércio"))
                 self._draw_icon(self.origin_id, x, y, categoria)
             
-            # Desenhar apenas destino
+            # Desenha apenas ícone de destino
             if self.destination_id in self.pins:
                 x, y = self.pins[self.destination_id]
                 nome, categoria = self.router.pontos_info.get(self.destination_id, ("Destino", "Comércio"))
                 self._draw_icon(self.destination_id, x, y, categoria)
         else:
-            # Desenhar todos os ícones
+            # Desenha todos os ícones disponíveis
             for ponto_id, (x, y) in self.pins.items():
                 if ponto_id in self.router.pontos_info:
                     nome, categoria = self.router.pontos_info[ponto_id]
                     self._draw_icon(ponto_id, x, y, categoria)
 
     def _draw_icon(self, ponto_id: int, x: int, y: int, categoria: str):
-        """Desenha um ícone no mapa"""
-        # Obter imagem do ícone
+        """Desenha ícone individual no canvas com tamanho ajustado ao zoom"""
+        # Busca imagem do ícone pela categoria
         icon_img = self.icones.get(categoria)
         if not icon_img:
-            # Fallback para ícone genérico
+            # Fallback para ícone genérico se categoria não encontrada
             icon_img = self.icones.get("Comércio")
         
         if not icon_img:
             return  # Sem ícone disponível
 
-        # Converter coordenadas da imagem para canvas
+        # Converte coordenadas da imagem para posição no canvas
         canvas_x, canvas_y = self._img_to_canvas(x, y)
         if canvas_x is None:
             return
 
-        # Redimensionar ícone baseado no zoom
+        # Ajusta tamanho do ícone baseado no zoom atual
         icon_size = int(32 * min(self.scale, 1.5))
         icon_resized = icon_img.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
         
-        # Converter para PhotoImage
+        # Converte PIL.Image para formato Tk
         photo = ImageTk.PhotoImage(icon_resized)
         
-        # Desenhar no canvas com anchor='s' para posicionar a ponta do pin na coordenada
+        # Desenha no canvas com anchor='s' (ponta inferior do pin na coordenada)
         canvas_id = self.canvas.create_image(canvas_x, canvas_y, image=photo, 
                                             anchor='s', tags=f"icon_{ponto_id}")
         
-        # Guardar referência para evitar garbage collection
+        # Mantém referência para evitar garbage collection do PhotoImage
         if not hasattr(self, '_icon_photos'):
             self._icon_photos = {}
         self._icon_photos[ponto_id] = photo
         
-        # Guardar canvas_id
+        # Armazena ID do canvas para manipulação futura
         self.icon_markers[ponto_id] = canvas_id
         
-        # Bind click event
+        # Adiciona evento de clique no ícone
         self.canvas.tag_bind(f"icon_{ponto_id}", '<Button-1>', 
                             lambda e, pid=ponto_id: self._on_icon_click(pid))
 
     def _on_icon_click(self, ponto_id: int):
-        """Handler para clique em ícone"""
+        """Trata clique em ícone: define origem ou destino com validações"""
         nome, _ = self.router.pontos_info.get(ponto_id, ("Desconhecido", ""))
         
-        # Se não há origem, definir como origem
+        # Se não há origem, define como origem
         if self.origin_id is None:
             self.origin_id = ponto_id
             self.origin_label.configure(text=f"📍 Origem: {nome}")
-            self._log_message(f"📍 Origem: {nome} (ID: {ponto_id})")
-        # Se há origem mas não destino, definir como destino
+            self._log_message(f"📍 Origem: {nome}")
+        # Se há origem mas não destino, define como destino
         elif self.destination_id is None:
-            # ⚠️ VALIDAÇÃO: destino != origem
+            # Validação: destino != origem
             if ponto_id == self.origin_id:
                 messagebox.showwarning("Aviso", "Destino não pode ser igual à origem!")
                 return
             self.destination_id = ponto_id
             self.dest_label.configure(text=f"🎯 Destino: {nome}")
-            self._log_message(f"🎯 Destino: {nome} (ID: {ponto_id})")
-        # Se ambos já estão definidos, perguntar o que fazer
+            self._log_message(f"🎯 Destino: {nome}")
+        # Ambos já definidos: pergunta o que substituir
         else:
             response = messagebox.askquestion("Substituir?", 
                                              f"Substituir origem ou destino com '{nome}'?\n\nSim = Origem\nNão = Destino",
                                              icon='question')
             if response == 'yes':
-                # ⚠️ VALIDAÇÃO: novo origem != destino atual
+                # Validação: nova origem != destino atual
                 if ponto_id == self.destination_id:
                     messagebox.showwarning("Aviso", "Origem não pode ser igual ao destino!")
                     return
                 self.origin_id = ponto_id
                 self.origin_label.configure(text=f"📍 Origem: {nome}")
-                self._log_message(f"📍 Origem atualizada: {nome} (ID: {ponto_id})")
+                self._log_message(f"📍 Origem: {nome}")
             else:
-                # ⚠️ VALIDAÇÃO: novo destino != origem atual
+                # Validação: novo destino != origem atual
                 if ponto_id == self.origin_id:
                     messagebox.showwarning("Aviso", "Destino não pode ser igual à origem!")
                     return
                 self.destination_id = ponto_id
                 self.dest_label.configure(text=f"🎯 Destino: {nome}")
-                self._log_message(f"🎯 Destino atualizado: {nome} (ID: {ponto_id})")
+                self._log_message(f"🎯 Destino: {nome}")
         
         self._redraw_markers()
 
     def _img_to_canvas(self, ix: int, iy: int) -> Tuple[Optional[int], Optional[int]]:
-        """Converte coordenadas da imagem para coordenadas do canvas"""
+        """Transforma coordenadas da imagem original para coordenadas do canvas (considera zoom e pan)"""
         canvas_w = self.canvas.winfo_width()
         canvas_h = self.canvas.winfo_height()
         img_w, img_h = self.original_image.size
@@ -997,7 +1027,7 @@ class ModernMapApp:
         return (cx, cy)
 
     def _canvas_to_img(self, cx: int, cy: int) -> Tuple[Optional[int], Optional[int]]:
-        """Converte coordenadas do canvas para coordenadas da imagem"""
+        """Transforma coordenadas do canvas para coordenadas da imagem original (inverso de _img_to_canvas)"""
         canvas_w = self.canvas.winfo_width()
         canvas_h = self.canvas.winfo_height()
         img_w, img_h = self.original_image.size
@@ -1011,14 +1041,15 @@ class ModernMapApp:
         ix = int((cx - x0) / scale)
         iy = int((cy - y0) / scale)
         
+        # Verifica se está dentro dos limites da imagem
         if ix < 0 or iy < 0 or ix >= img_w or iy >= img_h:
             return (None, None)
         
         return (ix, iy)
 
     def _generate_route(self):
-        """Gera rota entre origem e destino usando Dijkstra"""
-        # ⚠️ VALIDAÇÃO FINAL
+        """Calcula e desenha rota usando Dijkstra do backend C"""
+        # Validações finais
         if self.origin_id is None:
             messagebox.showwarning("Origem não definida", "Por favor, selecione um ponto de origem.")
             return
@@ -1031,44 +1062,153 @@ class ModernMapApp:
             messagebox.showwarning("Pontos iguais", "Origem e destino não podem ser o mesmo ponto.")
             return
 
-        self._log_message(f"🚀 Calculando rota de ID {self.origin_id} para ID {self.destination_id}...")
-        
         try:
-            # ===== USAR DIJKSTRA DO BACKEND C =====
+            # Chama função Dijkstra do backend C via ctypes
             resultado = self.router.calcular_rota_dijkstra(self.origin_id, self.destination_id)
             
             if resultado is None:
-                self._log_message("❌ Erro ao calcular rota com Dijkstra")
+                self._log_message("❌ Erro ao calcular rota")
                 messagebox.showerror("Erro", "Não foi possível calcular a rota")
                 return
             
-            # Extrair dados do resultado
+            # Extrai dados da estrutura ResultadoRota
             sequencia_ids = resultado['sequencia_ids']
             distancia_total = resultado['distancia_total']
             num_pontos = resultado['num_ids']
             
             if len(sequencia_ids) < 2:
-                self._log_message("❌ Rota inválida (menos de 2 pontos)")
+                self._log_message("❌ Rota inválida")
                 messagebox.showerror("Erro", "Rota calculada é inválida")
                 return
             
-            self._log_message(f"✅ Rota encontrada com {num_pontos} vértices")
-            self._log_message(f"📏 Distância total: {distancia_total} metros")
-            self._log_message(f"🛤️  Caminho: {' → '.join(map(str, sequencia_ids))}")
-            
-            # Converter IDs para coordenadas (do backend C - coordenadas do grafo)
+            # Converte IDs de vértices para coordenadas (x, y) para desenhar
             points = []
+            ruas_visitadas = []
             for ponto_id in sequencia_ids:
                 coords = self.router.obter_coordenadas_vertice(ponto_id)
                 if coords:
                     points.append(coords)
-                else:
-                    self._log_message(f"⚠️ Vértice {ponto_id} não encontrado (pulando)")
+                    # Coleta nome da rua (evita duplicatas)
+                    rua = self.router.obter_rua_vertice(ponto_id)
+                    if rua and rua not in ruas_visitadas:
+                        ruas_visitadas.append(rua)
             
             if len(points) < 2:
                 self._log_message("❌ Coordenadas insuficientes para desenhar rota")
                 messagebox.showerror("Erro", "Não foi possível obter coordenadas da rota")
                 return
+            
+            # Formata distância para exibição
+            if distancia_total >= 1000:
+                distancia_valor = f"{distancia_total / 1000:.2f}"
+                distancia_unidade = "km"
+            else:
+                distancia_valor = str(distancia_total)
+                distancia_unidade = "m"
+            
+            # Criar texto das ruas com quebras de linha
+            if ruas_visitadas:
+                # Juntar com quebra de linha após cada seta
+                ruas_texto = ""
+                for i, rua in enumerate(ruas_visitadas):
+                    if i > 0:
+                        ruas_texto += "→ "
+                    ruas_texto += f"{rua}"
+                    if i < len(ruas_visitadas) - 1:
+                        ruas_texto += "\n"
+            else:
+                ruas_texto = "Caminho interno"
+            
+            # Limpar frame de informações anteriores
+            for widget in self.route_info_frame.winfo_children():
+                widget.destroy()
+            
+            # Calcular altura necessária baseada no número de linhas
+            num_linhas = len(ruas_visitadas) if ruas_visitadas else 1
+            altura_necessaria = 50 + (num_linhas * 25)  # 50px base + 25px por linha
+            
+            # Criar labels formatados
+            if self.is_ctk:
+                # Ajustar altura do frame
+                self.route_info_frame.configure(height=altura_necessaria)
+                
+                # Label de distância
+                dist_frame = ctk.CTkFrame(self.route_info_frame, fg_color="transparent")
+                dist_frame.pack(fill='x', pady=(5, 2))
+                
+                ctk.CTkLabel(dist_frame, text="📏 Distância: ", 
+                           font=('Arial', 11), text_color="#ffffff", anchor='w').pack(side='left')
+                ctk.CTkLabel(dist_frame, text=distancia_valor, 
+                           font=('Arial', 16, 'bold'), text_color="#4cc9f0", anchor='w').pack(side='left')
+                ctk.CTkLabel(dist_frame, text=f" {distancia_unidade}", 
+                           font=('Arial', 11), text_color="#ffffff", anchor='w').pack(side='left')
+                
+                # Label de ruas
+                ruas_label_frame = ctk.CTkFrame(self.route_info_frame, fg_color="transparent")
+                ruas_label_frame.pack(fill='x', pady=(5, 2), padx=0)
+                
+                ctk.CTkLabel(ruas_label_frame, text="🛣️ Ruas:", 
+                           font=('Arial', 11), text_color="#ffffff", anchor='w', justify='left').pack(side='left', anchor='nw')
+                
+                # Frame para o texto das ruas com scroll se necessário
+                ruas_text_frame = ctk.CTkFrame(self.route_info_frame, fg_color="transparent")
+                ruas_text_frame.pack(fill='x', padx=10, pady=(0, 5))
+                
+                ruas_text_widget = ctk.CTkTextbox(ruas_text_frame, 
+                                                height=min(num_linhas * 25, 100),  # Máximo 100px
+                                                font=('Arial', 10),
+                                                text_color="#4cc9f0",
+                                                fg_color="#1a1a1a",
+                                                border_width=0,
+                                                wrap='word',
+                                                activate_scrollbars=True)
+                ruas_text_widget.insert('1.0', ruas_texto)
+                ruas_text_widget.configure(state='disabled')
+                ruas_text_widget.pack(fill='x', pady=2)
+                
+            else:
+                # Ajustar altura do frame
+                self.route_info_frame.configure(height=altura_necessaria)
+                
+                # Label de distância
+                dist_frame = tk.Frame(self.route_info_frame, bg='#1a1a1a')
+                dist_frame.pack(fill='x', pady=(5, 2))
+                
+                tk.Label(dist_frame, text="📏 Distância: ", 
+                       font=('Arial', 10), bg='#1a1a1a', fg='#ffffff', anchor='w', justify='left').pack(side='left')
+                tk.Label(dist_frame, text=distancia_valor, 
+                       font=('Arial', 14, 'bold'), bg='#1a1a1a', fg='#4cc9f0', anchor='w', justify='left').pack(side='left')
+                tk.Label(dist_frame, text=f" {distancia_unidade}", 
+                       font=('Arial', 10), bg='#1a1a1a', fg='#ffffff', anchor='w', justify='left').pack(side='left')
+                
+                # Label de ruas
+                tk.Label(self.route_info_frame, text="🛣️ Ruas:", 
+                       font=('Arial', 10), bg='#1a1a1a', fg='#ffffff', anchor='w', justify='left').pack(fill='x', pady=(5, 2), padx=10)
+                
+                # Text widget para as ruas (permite scroll)
+                ruas_text_frame = tk.Frame(self.route_info_frame, bg='#1a1a1a')
+                ruas_text_frame.pack(fill='x', padx=10, pady=(0, 5))
+                
+                # Text widget com scrollbar
+                text_widget = tk.Text(ruas_text_frame,
+                                    height=min(num_linhas, 4),  # Mostrar até 4 linhas
+                                    width=50,
+                                    bg='#1a1a1a',
+                                    fg='#4cc9f0',
+                                    font=('Arial', 9),
+                                    wrap='word',
+                                    relief='flat',
+                                    borderwidth=0,
+                                    highlightthickness=0)
+                
+                scrollbar = tk.Scrollbar(ruas_text_frame, command=text_widget.yview)
+                text_widget.configure(yscrollcommand=scrollbar.set)
+                
+                text_widget.insert('1.0', ruas_texto)
+                text_widget.configure(state='disabled')
+                
+                text_widget.pack(side='left', fill='x', expand=True)
+                scrollbar.pack(side='right', fill='y')
             
             # Desenhar rota
             self._draw_route(points)
@@ -1077,12 +1217,11 @@ class ModernMapApp:
             self.route_active = True
             self._draw_all_icons()
             
-            self._log_message(f"✅ Rota desenhada com sucesso!")
+            self._log_message(f"✅ Rota calculada: {distancia_valor}{distancia_unidade}, {len(ruas_visitadas)} ruas")
             
         except Exception as e:
-            self._log_message(f"❌ Erro ao processar rota: {e}")
+            self._log_message(f"❌ Erro: {e}")
             messagebox.showerror("Erro", f"Erro ao processar rota: {e}")
-
 
     def _draw_route(self, points: List[Tuple[int, int]]):
         """Desenha a rota no mapa"""
@@ -1149,6 +1288,16 @@ class ModernMapApp:
         self.origin_label.configure(text="📍 Origem: Não selecionada")
         self.dest_label.configure(text="🎯 Destino: Não selecionado")
         
+        # Limpar informações da rota
+        for widget in self.route_info_frame.winfo_children():
+            widget.destroy()
+        
+        # Resetar altura do frame
+        if self.is_ctk:
+            self.route_info_frame.configure(height=0)
+        else:
+            self.route_info_frame.configure(height=0)
+        
         # Marcar rota como inativa
         self.route_active = False
         
@@ -1209,10 +1358,7 @@ class ModernMapApp:
 
     def _on_canvas_click(self, event):
         """Handler para cliques no canvas (fora dos ícones)"""
-        # Este método já não é necessário para seleção, mas mantemos para debug
-        ix, iy = self._canvas_to_img(event.x, event.y)
-        if ix is not None:
-            self._log_message(f"📌 Clique em: ({ix}, {iy})")
+        pass
 
     def _on_left_press(self, event):
         """Handler para pressionar botão esquerdo"""
@@ -1234,13 +1380,11 @@ class ModernMapApp:
         """Aumenta o zoom"""
         self.scale = min(self.scale * 1.2, 5.0)
         self._update_canvas_image()
-        self._log_message("🔍 Zoom aumentado")
 
     def _zoom_out(self):
         """Diminui o zoom"""
         self.scale = max(self.scale / 1.2, 0.1)
         self._update_canvas_image()
-        self._log_message("🔍 Zoom reduzido")
 
     def _reset_view(self):
         """Reseta zoom e pan"""
@@ -1248,7 +1392,6 @@ class ModernMapApp:
         self.pan_x = 0
         self.pan_y = 0
         self._update_canvas_image()
-        self._log_message("📐 Visualização resetada")
 
     def _create_separator(self):
         """Cria um separador visual"""
@@ -1268,9 +1411,8 @@ class ModernMapApp:
         return color
 
     def _log_message(self, message: str):
-        """Adiciona mensagem ao log"""
-        self.out_text.insert('end', f"{message}\n")
-        self.out_text.see('end')
+        """Método mantido para compatibilidade (sem logs visuais)"""
+        pass
 
     def run(self):
         """Inicia a aplicação"""

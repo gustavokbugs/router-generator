@@ -3,29 +3,30 @@
 
 #include "grafo.h"
 
-/* Estruturas para dados estáticos */
+/* Estrutura para representar dados de vértice do banco estático */
 typedef struct {
-    int id;
-    const char* nome;
-    const char* categoria;
-    const char* rua;
-    int tipo;
-    int x;
-    int y;
+    int id;              // ID único do vértice
+    const char* nome;    // Nome descritivo (ex: "Pátio Universitário")
+    const char* categoria; // Categoria (ex: "Centro Histórico", "Restaurante")
+    const char* rua;     // Nome da rua onde está localizado
+    int tipo;            // Tipo do vértice (0=esquina, 1=ponto turístico)
+    int x;               // Coordenada X no mapa
+    int y;               // Coordenada Y no mapa
 } VerticeData;
 
+/* Estrutura para representar dados de aresta do banco estático */
 typedef struct {
-    int origem;
-    int destino;
-    int distancia;
+    int origem;      // ID do vértice de origem
+    int destino;     // ID do vértice de destino
+    int distancia;   // Peso da aresta (distância em metros)
 } ArestaData;
 
-/* Protótipos - Acesso aos dados estáticos */
-const VerticeData* obter_vertices_static(int* count);
-const ArestaData* obter_arestas_static(int* count);
+/* Funções de acesso aos dados estáticos (implementadas em grafo_data.c) */
+const VerticeData* obter_vertices_static(int* count);  // Retorna array de vértices
+const ArestaData* obter_arestas_static(int* count);    // Retorna array de arestas
 
-/* Protótipos do Banco de Dados */
-void inicializar_vertices(Grafo* g);
-void inicializar_arestas(Grafo* g);
+/* Funções de inicialização do grafo a partir do banco estático */
+void inicializar_vertices(Grafo* g);  // Popula grafo com vértices do banco
+void inicializar_arestas(Grafo* g);   // Popula grafo com arestas do banco
 
 #endif
