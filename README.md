@@ -183,20 +183,17 @@ Sistema gráfico interativo para geração de rotas no centro de Santa Cruz do S
 - Interface Python (CustomTkinter)
 - Algoritmos de rota em C
 - Mapa interativo
-- Suporte a múltiplos destinos
 
 ---
 
 ## ✨ Funcionalidades
 
 ### 🎯 Modos
-- Rota com múltiplos destinos
 - Rota direta para um destino
 
 ### 🗾 Interface
 - Mapa interativo com zoom
 - Arrastar
-- Rotas coloridas
 - Marcadores de origem e destino
 
 ### 📍 Pontos mapeados
