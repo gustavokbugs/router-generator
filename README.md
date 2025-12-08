@@ -9,7 +9,6 @@ Este projeto acadêmico consiste em um sistema de geração de rotas para pontos
 - **Tela Inicial Interativa**: Permite escolher entre modos de rota com múltiplos destinos ou apenas um destino.
 - **Seleção Visual no Mapa**: O usuário pode clicar diretamente no mapa para marcar a origem e os destinos, ou utilizar botões de pontos turísticos pré-definidos.
 - **Pontos Turísticos Pré-definidos**: Inclui pontos de interesse no centro de Santa Cruz do Sul, com coordenadas fixas.
-- **Geração de Múltiplas Rotas**: No modo de múltiplos destinos, o sistema gera rotas para cada destino a partir da origem.
 - **Interface Moderna e Intuitiva**: Desenvolvida com CustomTkinter para uma experiência de usuário agradável.
 - **Controles de Mapa**: Zoom e arrastar para navegar pelo mapa.
 
