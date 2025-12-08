@@ -1,0 +1,36 @@
+
+========================================
+   SISTEMA DE NAVEGAÇÃO - GUIA RÁPIDO
+========================================
+
+📍 COMO USAR:
+1. Execute SistemaNavegacao.exe
+2. Selecione um ponto de origem no mapa ou na lista
+3. Selecione um ponto de destino
+4. Clique em "🚀 Calcular Rota"
+5. A rota será desenhada no mapa com a distância total
+
+🖱️ CONTROLES:
+- Zoom In/Out: Use os botões na interface
+- Arrastar mapa: Ctrl + Botão esquerdo do mouse
+- Buscar pontos: Digite no campo de busca
+
+📋 REQUISITOS:
+- Windows 7 ou superior
+- Nenhuma instalação adicional necessária
+
+⚠️ IMPORTANTE:
+Mantenha todos os arquivos na mesma pasta:
+- SistemaNavegacao.exe
+- perimetro-mapa.png
+- pins.json
+- backend/router.dll
+- assets/ (pasta com ícones)
+
+🐛 PROBLEMAS?
+Se o programa não iniciar, verifique se:
+1. Todos os arquivos estão presentes
+2. O antivírus não está bloqueando o executável
+3. Você tem permissões de execução na pasta
+
+Versão: 1.0

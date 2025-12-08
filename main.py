@@ -451,19 +451,24 @@ class ModernMapApp:
         self._drag_start = None  # Posição inicial do arrasto
         self._search_debounce_id = None  # Timer para debounce da busca
         self._lazy_load_id = None  # Timer para lazy loading da lista
+        self._resize_debounce_id = None  # Timer para debounce do resize
+        self._drag_update_id = None  # Timer para throttle do drag
         self._all_pontos = []  # Cache de todos os pontos carregados
         self._loaded_count = 0  # Quantidade de itens já carregados na lista
         self.BATCH_SIZE = 20  # Carregar 20 itens por vez (performance)
         self.route_active = False  # Flag: há rota calculada e desenhada?
         self.route_lines: List[int] = []  # IDs das linhas da rota no canvas
         self._pontos_cache = None  # Cache dos pontos turísticos
+        self._image_cache = {}  # Cache de imagens redimensionadas (scale → PIL.Image)
+        self._last_canvas_size = (0, 0)  # Última dimensão do canvas
 
         # Constrói interface gráfica
         self._build_ui()
 
-        # Renderização inicial (após construção da UI)
-        self.root.after(100, self._update_canvas_image)  # Desenha mapa
-        self.root.after(200, self._draw_all_icons)  # Desenha ícones
+        # Renderização inicial (após construção da UI) - sem delays desnecessários
+        self.root.update_idletasks()
+        self._update_canvas_image()  # Desenha mapa imediatamente
+        self._draw_all_icons()  # Desenha ícones imediatamente
         
     def _load_pins(self) -> Dict:
         """Carrega coordenadas visuais do arquivo pins.json. Retorna dict: id → (x, y)"""
@@ -504,20 +509,20 @@ class ModernMapApp:
         return icons
 
     def _build_ui(self):
-        # Container para painel esquerdo com scroll - MAIOR E DINÂMICO
+        # Container para painel esquerdo com scroll
         container_frame = tk.Frame(self.root, bg='#2b2b2b')
         container_frame.grid(row=0, column=0, sticky="nsew", padx=(10, 5), pady=10)
-        container_frame.grid_columnconfigure(0, minsize=520)  # Largura mínima aumentada
+        container_frame.grid_columnconfigure(0, minsize=520)  # Largura mínima padrão
         
-        # Canvas para scroll - com largura dinâmica
+        # Canvas para scroll
         canvas_scroll = tk.Canvas(container_frame, bg='#2b2b2b', highlightthickness=0, width=520)
         scrollbar = tk.Scrollbar(container_frame, orient='vertical', command=canvas_scroll.yview)
         
         # Painel esquerdo - Controles (dentro do canvas)
         if self.is_ctk:
-            self.control_frame = ctk.CTkFrame(canvas_scroll, corner_radius=15, fg_color='#2b2b2b', width=500)
+            self.control_frame = ctk.CTkFrame(canvas_scroll, corner_radius=15, fg_color='#2b2b2b', width=330)
         else:
-            self.control_frame = tk.Frame(canvas_scroll, bg='#2b2b2b', width=500)
+            self.control_frame = tk.Frame(canvas_scroll, bg='#2b2b2b', width=330)
         
         # Configurar scrollregion dinamicamente
         def update_scrollregion(event=None):
@@ -898,28 +903,40 @@ class ModernMapApp:
 
     def _draw_all_icons(self):
         """Renderiza ícones de todos os pontos turísticos no mapa (ou só origem/destino se há rota ativa)"""
-        # Limpa ícones existentes do canvas
-        for canvas_id in self.icon_markers.values():
-            try:
-                self.canvas.delete(canvas_id)
-            except:
-                pass
-        self.icon_markers.clear()
-
-        # Se há rota ativa, mostra apenas origem e destino para clareza visual
+        # Limpa apenas ícones que não serão redesenhados
         if self.route_active and self.origin_id and self.destination_id:
-            # Desenha apenas ícone de origem
-            if self.origin_id in self.pins:
+            # Se há rota ativa, mantém apenas origem e destino
+            icons_to_keep = {self.origin_id, self.destination_id}
+            icons_to_remove = []
+            for ponto_id, canvas_id in self.icon_markers.items():
+                if ponto_id not in icons_to_keep:
+                    icons_to_remove.append(ponto_id)
+                    try:
+                        self.canvas.delete(canvas_id)
+                    except:
+                        pass
+            for ponto_id in icons_to_remove:
+                del self.icon_markers[ponto_id]
+            
+            # Desenha apenas origem e destino se ainda não foram desenhados
+            if self.origin_id not in self.icon_markers and self.origin_id in self.pins:
                 x, y = self.pins[self.origin_id]
                 nome, categoria = self.router.pontos_info.get(self.origin_id, ("Origem", "Comércio"))
                 self._draw_icon(self.origin_id, x, y, categoria)
             
-            # Desenha apenas ícone de destino
-            if self.destination_id in self.pins:
+            if self.destination_id not in self.icon_markers and self.destination_id in self.pins:
                 x, y = self.pins[self.destination_id]
                 nome, categoria = self.router.pontos_info.get(self.destination_id, ("Destino", "Comércio"))
                 self._draw_icon(self.destination_id, x, y, categoria)
         else:
+            # Limpa todos os ícones
+            for canvas_id in self.icon_markers.values():
+                try:
+                    self.canvas.delete(canvas_id)
+                except:
+                    pass
+            self.icon_markers.clear()
+            
             # Desenha todos os ícones disponíveis
             for ponto_id, (x, y) in self.pins.items():
                 if ponto_id in self.router.pontos_info:
@@ -1208,12 +1225,17 @@ class ModernMapApp:
                 text_widget.pack(side='left', fill='x', expand=True)
                 scrollbar.pack(side='right', fill='y')
             
+            # Marcar rota como ativa ANTES de desenhar para otimizar
+            self.route_active = True
+            
             # Desenhar rota
             self._draw_route(points)
             
-            # Marcar rota como ativa e redesenhar ícones (mostrando apenas origem/destino)
-            self.route_active = True
+            # Redesenhar ícones (mostrando apenas origem/destino) - otimizado
             self._draw_all_icons()
+            
+            # Forçar atualização da UI sem bloquear
+            self.canvas.update_idletasks()
             
             self._log_message(f"✅ Rota calculada: {distancia_valor}{distancia_unidade}, {len(ruas_visitadas)} ruas")
             
@@ -1222,37 +1244,33 @@ class ModernMapApp:
             messagebox.showerror("Erro", f"Erro ao processar rota: {e}")
 
     def _draw_route(self, points: List[Tuple[int, int]]):
-        """Desenha a rota no mapa"""
+        """Desenha a rota no mapa (otimizado com batch de coordenadas)"""
         # Limpar rotas anteriores
-        for line_id in self.route_lines:
-            try:
-                self.canvas.delete(line_id)
-            except:
-                pass
-        self.route_lines.clear()
+        if self.route_lines:
+            self.canvas.delete('route')  # Usa tag para deletar tudo de uma vez
+            self.route_lines.clear()
 
-        # Desenhar linhas conectando os pontos
-        for i in range(len(points) - 1):
-            x1, y1 = points[i]
-            x2, y2 = points[i + 1]
+        # Pré-computar todas as coordenadas do canvas
+        canvas_points = []
+        for x, y in points:
+            cx, cy = self._img_to_canvas(x, y)
+            if cx is not None and cy is not None:
+                canvas_points.append((cx, cy))
+        
+        # Desenhar linhas conectando os pontos (batch)
+        for i in range(len(canvas_points) - 1):
+            cx1, cy1 = canvas_points[i]
+            cx2, cy2 = canvas_points[i + 1]
             
-            cx1, cy1 = self._img_to_canvas(x1, y1)
-            cx2, cy2 = self._img_to_canvas(x2, y2)
-            
-            if cx1 is not None and cx2 is not None:
-                line_id = self.canvas.create_line(cx1, cy1, cx2, cy2, 
-                                                  fill='#4cc9f0', width=3,
-                                                  tags='route')
-                self.route_lines.append(line_id)
+            line_id = self.canvas.create_line(cx1, cy1, cx2, cy2, 
+                                              fill='#4cc9f0', width=3,
+                                              tags='route', capstyle='round', joinstyle='round')
+            self.route_lines.append(line_id)
 
     def _redraw_markers(self):
-        """Redesenha marcadores de origem e destino"""
-        # Limpar marcadores anteriores
-        for mid in self.markers:
-            try:
-                self.canvas.delete(mid)
-            except:
-                pass
+        """Redesenha marcadores de origem e destino (otimizado)"""
+        # Limpar marcadores anteriores usando tags
+        self.canvas.delete('marker')
         self.markers.clear()
 
         # Desenhar origem
@@ -1264,7 +1282,7 @@ class ModernMapApp:
                 r = 8
                 marker = self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
                                                 fill='#00ff00', outline='#ffffff',
-                                                width=2, tags='marker_origin')
+                                                width=2, tags='marker')
                 self.markers.append(marker)
 
         # Desenhar destino
@@ -1276,11 +1294,11 @@ class ModernMapApp:
                 r = 8
                 marker = self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
                                                 fill='#ff0000', outline='#ffffff',
-                                                width=2, tags='marker_dest')
+                                                width=2, tags='marker')
                 self.markers.append(marker)
 
     def _clear(self):
-        """Limpa todas as seleções e rotas"""
+        """Limpa todas as seleções e rotas (otimizado)"""
         self.origin_id = None
         self.destination_id = None
         self.origin_label.configure(text="📍 Origem: Não selecionada")
@@ -1291,28 +1309,17 @@ class ModernMapApp:
             widget.destroy()
         
         # Resetar altura do frame
-        if self.is_ctk:
-            self.route_info_frame.configure(height=0)
-        else:
-            self.route_info_frame.configure(height=0)
+        self.route_info_frame.configure(height=0)
         
         # Marcar rota como inativa
         self.route_active = False
         
-        # Limpar rotas
-        for line_id in self.route_lines:
-            try:
-                self.canvas.delete(line_id)
-            except:
-                pass
+        # Limpar rotas usando tags (mais rápido)
+        self.canvas.delete('route')
         self.route_lines.clear()
         
-        # Limpar marcadores
-        for mid in self.markers:
-            try:
-                self.canvas.delete(mid)
-            except:
-                pass
+        # Limpar marcadores usando tags (mais rápido)
+        self.canvas.delete('marker')
         self.markers.clear()
         
         # Redesenhar todos os ícones
@@ -1321,7 +1328,7 @@ class ModernMapApp:
         self._log_message("🗑️ Tudo limpo. Selecione novos pontos.")
 
     def _update_canvas_image(self):
-        """Atualiza a imagem do mapa no canvas"""
+        """Atualiza a imagem do mapa no canvas (otimizado com cache)"""
         canvas_w = self.canvas.winfo_width()
         canvas_h = self.canvas.winfo_height()
         if canvas_w <= 1 or canvas_h <= 1:
@@ -1332,7 +1339,17 @@ class ModernMapApp:
         disp_w = int(img_w * scale)
         disp_h = int(img_h * scale)
 
-        resized = self.original_image.resize((disp_w, disp_h), Image.Resampling.LANCZOS)
+        # Usa cache de imagem redimensionada se disponível
+        cache_key = (disp_w, disp_h)
+        if cache_key in self._image_cache:
+            resized = self._image_cache[cache_key]
+        else:
+            resized = self.original_image.resize((disp_w, disp_h), Image.Resampling.LANCZOS)
+            # Limita cache a 5 imagens
+            if len(self._image_cache) >= 5:
+                self._image_cache.pop(next(iter(self._image_cache)))
+            self._image_cache[cache_key] = resized
+        
         self.tk_image = ImageTk.PhotoImage(resized)
 
         x0 = max((canvas_w - disp_w) // 2, 0) + self.pan_x
@@ -1344,15 +1361,33 @@ class ModernMapApp:
         self.canvas_img_id = self.canvas.create_image(x0, y0, anchor='nw', image=self.tk_image, tags='map_image')
         self.canvas.tag_lower('map_image')
         
-        # Redesenhar ícones
-        self._draw_all_icons()
-        
-        # Redesenhar marcadores
-        self._redraw_markers()
+        # Só redesenha ícones e marcadores se o canvas mudou de tamanho
+        current_size = (canvas_w, canvas_h)
+        if current_size != self._last_canvas_size:
+            self._last_canvas_size = current_size
+            self._draw_all_icons()
+            self._redraw_markers()
+        # Durante pan/zoom, só atualiza posições sem redesenhar tudo
+        else:
+            # Atualiza apenas posições (mais rápido)
+            for ponto_id in list(self.icon_markers.keys()):
+                if ponto_id in self.pins:
+                    x, y = self.pins[ponto_id]
+                    cx, cy = self._img_to_canvas(x, y)
+                    if cx is not None and ponto_id in self.icon_markers:
+                        self.canvas.coords(self.icon_markers[ponto_id], cx, cy)
+            
+            # Atualiza marcadores
+            self._redraw_markers()
 
     def _on_resize(self, event):
-        """Handler para resize da janela"""
-        self._update_canvas_image()
+        """Handler para resize da janela (com debounce para evitar lag)"""
+        # Cancela timer anterior se existir
+        if self._resize_debounce_id:
+            self.root.after_cancel(self._resize_debounce_id)
+        
+        # Agenda atualização após 100ms (evita múltiplas atualizações durante resize)
+        self._resize_debounce_id = self.root.after(100, self._update_canvas_image)
 
     def _on_canvas_click(self, event):
         """Handler para cliques no canvas (fora dos ícones)"""
@@ -1364,15 +1399,22 @@ class ModernMapApp:
             self._drag_start = (event.x, event.y, self.pan_x, self.pan_y)
 
     def _on_left_drag(self, event):
-        """Handler para arrastar com botão esquerdo"""
+        """Handler para arrastar com botão esquerdo (throttled para melhor performance)"""
         if not self._drag_start:
             return
+        
+        # Throttle: atualiza no máximo a cada 16ms (~60 FPS)
+        if self._drag_update_id is not None:
+            return
+        
         sx, sy, px, py = self._drag_start
         dx = event.x - sx
         dy = event.y - sy
         self.pan_x = px + dx
         self.pan_y = py + dy
+        
         self._update_canvas_image()
+        self._drag_update_id = self.root.after(16, lambda: setattr(self, '_drag_update_id', None))
 
     def _zoom_in(self):
         """Aumenta o zoom"""
