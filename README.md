@@ -145,9 +145,9 @@ projeto-santa-cruz/
 
 O arquivo `main.py` utiliza `ctypes` para:
 
-- Carregar a biblioteca C
-- Converter os tipos
-- Ler a string resultante da rota
+- Carregar a biblioteca C.
+- Converter os tipos.
+- Ler a string resultante da rota.
 
 Se a biblioteca C não existir, usa uma rota de fallback em linha reta.
 
