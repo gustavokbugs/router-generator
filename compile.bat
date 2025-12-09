@@ -64,7 +64,7 @@ goto fim
 cd ..
 echo.
 echo ========================================
-echo ERRO na compilacao!
+echo ERRO na compilacao
 echo ========================================
 echo.
 
